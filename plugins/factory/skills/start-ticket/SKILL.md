@@ -37,17 +37,17 @@ Every `factory` command takes the ticket number and finds the worktree itself.
 
 ## 3. Local review — you trigger it, you never brief it
 
-The reviewer and judges are this plugin's subagents. You start them; they fetch the ticket, the
+The reviewer and judges are the factory's subagents. You start them; they fetch the ticket, the
 spec and the diff themselves. A hook blocks any spawn message other than the exact line
 `factory review` prints, keeps them read-only, and stops you from writing findings or verdicts.
 
-1. Commit everything, then `$FACTORY review begin <n>` and spawn `factory:factory-reviewer` with
+1. Commit everything, then `$FACTORY review begin <n>` and spawn `factory-reviewer` with
    exactly the line it prints (`Review ticket #<n>`).
-2. `$FACTORY review judges <n>` — spawn one `factory:factory-judge` per printed line, all in parallel,
+2. `$FACTORY review judges <n>` — spawn one `factory-judge` per printed line, all in parallel,
    each with exactly that line.
 3. `$FACTORY review assemble <n>`. It prints the confirmed blocking findings: fix exactly those (none of
    the non-blocking ones), commit, then `$FACTORY review resolve-begin <n>`, spawn one
-   `factory:factory-resolver` per printed line in parallel, and `$FACTORY review assemble <n> --resolve`.
+   `factory-resolver` per printed line in parallel, and `$FACTORY review assemble <n> --resolve`.
    What stays unresolved goes to the human in the PR; do not loop on it.
 
 ## 4. Open the PR

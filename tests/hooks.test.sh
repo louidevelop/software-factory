@@ -150,6 +150,10 @@ expect "judge with the exact message" review-guard.sh 0 "" "$(spawn factory:fact
 expect "judge handed the finding text" review-guard.sh 2 "exactly" \
   "$(spawn factory:factory-judge 'Judge finding 3 of ticket #12: the reviewer says the test is weak but it is fine')"
 expect "resolver with the exact message" review-guard.sh 0 "" "$(spawn factory:factory-resolver 'Check confirmed finding 1 of ticket #12')"
+# The thin layer's agents (.claude/agents/) have no plugin namespace; the guard is the same.
+expect "thin-layer reviewer with the exact message" review-guard.sh 0 "" "$(spawn factory-reviewer 'Review ticket #12')"
+expect "thin-layer judge briefed by the implementer" review-guard.sh 2 "exactly" \
+  "$(spawn factory-judge 'Judge finding 3 of ticket #12: it is fine')"
 expect "other subagents are not guarded" review-guard.sh 0 "" "$(spawn Explore 'find all callers of x')"
 
 # ---------- review-guard: inside a review subagent ----------
@@ -166,6 +170,13 @@ for cmd in 'rm src/a.py' 'echo hi > notes.txt' 'git diff > out.patch' 'sed -i s/
   '.factory/bin/factory tickets create t body.md' '.factory/bin/factory block 12 why'; do
   expect "reviewer may not: $cmd" review-guard.sh 2 "BLOCKED" "$(as_agent factory:factory-reviewer "$cmd")"
 done
+# A review agent's stub loads its instructions with `factory prompt`.
+for a in factory-reviewer factory:factory-judge factory-resolver; do
+  expect "$a may load its instructions" review-guard.sh 0 "" "$(as_agent "$a" ".factory/bin/factory prompt ${a#factory:}")"
+done
+expect "factory prompt does not open a door" review-guard.sh 2 "BLOCKED" \
+  "$(as_agent factory-reviewer '.factory/bin/factory prompt factory-reviewer; rm -rf src')"
+expect "thin-layer reviewer is read-only" review-guard.sh 2 "BLOCKED" "$(as_agent factory-reviewer 'rm src/a.py')"
 SAVE=$'.factory/bin/factory review save-findings 12 <<\'JSON\'\n{"findings": []}\nJSON'
 expect "reviewer saves through the heredoc" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$SAVE")"
 expect "a save without the ticket number is refused" review-guard.sh 2 "BLOCKED" \

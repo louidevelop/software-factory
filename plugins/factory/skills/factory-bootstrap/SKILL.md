@@ -66,13 +66,15 @@ Write, adapting the templates:
 - `.github/workflows/check.yml` — runs the `check` command and nothing else, on `pull_request`,
   pushes to the base branch and `workflow_dispatch` (the gate dispatches it on the PR combined with
   the current base before merging), with the job named `check`. Pinned toolchain from the version file.
-- `.claude/settings.json` — from `templates/settings.json` (enables the plugin, denies secrets and
-  merging). Add a `deny` entry for each `block` command that has a simple prefix.
+- `.claude/settings.json` — from `templates/settings.json` (denies secrets and merging; the sync
+  below adds the factory's hooks and drops the plugin keys). Add a `deny` entry for each `block`
+  command that has a simple prefix.
 - `.gitignore` — must cover `.env` and `.env.*` but not `.env.example`. Write `.env.example` with
   key names only.
 - `docs/specs/archive/.gitkeep`.
 - Then run `scripts/factory sync --apply` from the project root: it writes the factory block into
-  `AGENTS.md` and the managed files (issue template, PR template, gate workflow, `.factory/bin/factory`).
+  `AGENTS.md` and the managed files (issue template, PR template, gate workflow, the `.factory/bin/`
+  scripts, the factory's hooks in `.claude/settings.json`, and the agent and skill stubs in `.claude/`).
 
 ## 4. Walking skeleton
 
@@ -103,7 +105,8 @@ Report each probe with its actual output. Undo every probe's change afterwards.
    a comment mentioning them, not merged until the owner adds the `merge` label.
 8. (Needs the gate) A trivial PR with a ticket → `risk:low`, merged by the gate.
 
-Probes 1–4 need the hooks loaded: they fire only in a session started after the plugin is enabled.
-If this session predates the plugin, say so and have the user run them in a new session.
+Probes 1–4 need the hooks loaded: they fire only in a session started after the sync wrote them
+into `.claude/settings.json`. If this session predates that, say so and have the user run them in a
+new session.
 
 Finish with `scripts/factory doctor` and show its output.

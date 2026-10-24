@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# review — the local review, run as plugin SUBAGENTS spawned by the main agent:
-#   factory:factory-reviewer  "Review ticket #<n>"                    → findings
-#   factory:factory-judge     "Judge finding <k> of ticket #<n>"      → one verdict per blocking finding
-#   factory:factory-resolver  "Check confirmed finding <k> of ticket #<n>" → after the fixes
+# review — the local review, run as the factory's SUBAGENTS spawned by the main agent:
+#   factory-reviewer  "Review ticket #<n>"                          → findings
+#   factory-judge     "Judge finding <k> of ticket #<n>"            → one verdict per blocking finding
+#   factory-resolver  "Check confirmed finding <k> of ticket #<n>"  → after the fixes
 # The main agent only triggers them, with those exact messages: hooks/review-guard.sh blocks any
 # other wording, keeps the subagents read-only, and stops the main agent from writing findings,
 # verdicts or resolutions itself. The subagents gather the ticket, spec and diff on their own.
@@ -68,7 +68,7 @@ case "$SUB" in
     jq -n --argjson n "$N" --arg head "$HEAD" '{ticket: $n, head: $head}' >"$CUR/meta.json"
     rm -f "$RES"
     say "review of #$N at ${HEAD:0:7} begun"
-    echo "Spawn the factory:factory-reviewer subagent with exactly this message and nothing else:"
+    echo "Spawn the factory-reviewer subagent with exactly this message and nothing else:"
     echo "Review ticket #$N"
     ;;
 
@@ -87,7 +87,7 @@ case "$SUB" in
     if [ -z "$IDS" ]; then
       echo "No blocking findings: nothing to judge. Run: factory review assemble $N"
     else
-      echo "Spawn one factory:factory-judge subagent per line, in parallel, each with exactly that message:"
+      echo "Spawn one factory-judge subagent per line, in parallel, each with exactly that message:"
       for k in $IDS; do echo "Judge finding $k of ticket #$N"; done
     fi
     ;;
@@ -186,7 +186,7 @@ case "$SUB" in
     mkdir -p "$CUR"
     rm -f "$CUR"/resolution-*.json
     jq -n --arg head "$HEAD" '{head: $head}' >"$CUR/resolve.json"
-    echo "Spawn one factory:factory-resolver subagent per line, in parallel, each with exactly that message:"
+    echo "Spawn one factory-resolver subagent per line, in parallel, each with exactly that message:"
     for k in $(seq 1 "$(jq '.confirmed | length' "$RES")"); do echo "Check confirmed finding $k of ticket #$N"; done
     ;;
 

@@ -29,6 +29,12 @@ non-obvious choice goes in a comment next to the code it governs.
   (`hooks/lib.sh`) and the classifier implement it identically; change both or neither.
 - **The classifier only escalates.** No rule, input, or PR content may lower a rating. Errors → high.
   Config is read from the base branch, never from the PR.
+- **The thin layer is a contract.** A project commits only what `factory sync` writes:
+  `.factory/bin/{fetch,hook,factory}` (from `plugins/factory/templates/bin/`), the `hooks` key of
+  `.claude/settings.json`, and the agent and skill stubs in `.claude/`. Every session fetches
+  factory `main` through it. `main` may extend the thin layer, but must keep working with every
+  thin-layer version a project may still have until its sync PR merges: keep hook names, `factory`
+  subcommands and `factory prompt <name>` stable.
 - **The reviewer is never briefed by the implementer.** The review runs as plugin subagents
   (`agents/`) that the main agent triggers with an exact one-line message — `hooks/review-guard.sh`
   enforces the wording, keeps them read-only, and keeps everyone else from writing the review record.
@@ -38,5 +44,7 @@ non-obvious choice goes in a comment next to the code it governs.
 
 - Every hook behaviour has a case in `tests/hooks.test.sh`; every classifier rule has fixtures in
   `classifier/*.test.mjs`; the scripts' GitHub logic is tested in `tests/scripts.test.sh` against
-  `tests/fake-gh/gh`, which serves only `gh api` replies. Add the case in the same change as the behaviour.
+  `tests/fake-gh/gh`, which serves only `gh api` replies; the thin layer (sync, fetch,
+  `.factory/bin/hook`, `factory prompt`) in `tests/thin-layer.test.sh`, fetching from a local repo.
+  Add the case in the same change as the behaviour.
 - Never weaken or delete a test to make `check` pass.

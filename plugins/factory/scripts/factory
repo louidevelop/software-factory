@@ -24,6 +24,7 @@ usage: factory <command> [args]
   run [<parent-issue>]   unattended loop: start → implement → review → fix → open-pr, repeat
   block <issue> <reason> label a ticket blocked and comment the reason
   repo                   owner/repo from the git remote, for `gh api repos/$(factory repo)/…`
+  prompt <agent|skill>   print the full instructions of a factory agent or skill
   archive-specs          open an "Archive spec" PR for every feature whose tickets are all closed
 USAGE
 }
@@ -31,7 +32,7 @@ USAGE
 cmd=${1:-help}
 shift || true
 case "$cmd" in
-  doctor | github-setup | sync | tickets | start | review | open-pr | run | block | archive-specs)
+  doctor | github-setup | sync | tickets | start | review | open-pr | run | block | archive-specs | prompt)
     exec bash "$FACTORY_SCRIPTS/cmd/$cmd.sh" "$@"
     ;;
   repo)

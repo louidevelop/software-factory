@@ -23,13 +23,60 @@ T="$FACTORY_PLUGIN/templates"
 sha() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi | cut -c1-12; }
 
 # Managed whole files: "<template> <project path>". A template that does not exist yet
-# in this factory version is skipped.
+# in this factory version is skipped. The .factory/bin scripts are the thin layer every session
+# loads the factory through (see templates/bin/).
 MANAGED_FILES=(
   "github/ISSUE_TEMPLATE/agent-task.md .github/ISSUE_TEMPLATE/agent-task.md"
   "github/pull_request_template.md .github/pull_request_template.md"
   "github/factory-gate.yml .github/workflows/factory-gate.yml"
-  "factory-shim.sh .factory/bin/factory"
+  "bin/factory.sh .factory/bin/factory"
+  "bin/fetch.sh .factory/bin/fetch"
+  "bin/hook.sh .factory/bin/hook"
 )
+SETTINGS=.claude/settings.json
+
+# stub <instruction file> — its frontmatter, and a body that loads the instructions from the
+# runtime. The frontmatter stays in the project because Claude Code reads it before anything
+# runs: an agent's name and tools, a skill's description (what triggers it).
+stub() {
+  local name
+  name=$(basename "$1" .md)
+  [ "$name" = SKILL ] && name=$(basename "$(dirname "$1")")
+  awk 'NR == 1 && $0 == "---" { fm = 1; print; next } fm { print } fm && $0 == "---" { exit }' "$1"
+  printf '\n%s\n' "Run \`.factory/bin/factory prompt $name\` and follow its output exactly: it is the factory's full, current instructions for this."
+}
+
+# stage <dir> — write every managed file, as it should be in this checkout, under <dir>.
+stage() {
+  local entry src dst f
+  for entry in "${MANAGED_FILES[@]}"; do
+    src=${entry%% *}
+    dst=${entry#* }
+    [ -f "$T/$src" ] || continue
+    mkdir -p "$1/$(dirname "$dst")"
+    cp "$T/$src" "$1/$dst"
+  done
+  mkdir -p "$1/.claude/agents"
+  for f in "$FACTORY_PLUGIN"/agents/*.md; do stub "$f" >"$1/.claude/agents/$(basename "$f")"; done
+  for f in "$FACTORY_PLUGIN"/skills/*/SKILL.md; do
+    mkdir -p "$1/.claude/skills/$(basename "$(dirname "$f")")"
+    stub "$f" >"$1/.claude/skills/$(basename "$(dirname "$f")")/SKILL.md"
+  done
+  # settings.json: sync owns only the `hooks` key (replaced whole), so the project's permissions
+  # and everything else survive. The plugin keys go: the thin layer replaces the plugin, and both
+  # at once would run every hook twice.
+  if [ -f "$SETTINGS" ]; then cat "$SETTINGS"; else echo '{}'; fi |
+    jq --slurpfile h "$T/settings-hooks.json" '.hooks = $h[0].hooks | del(.enabledPlugins, .extraKnownMarketplaces)' \
+      >"$1/$SETTINGS" 2>/dev/null || die "$SETTINGS is not valid JSON; fix it, then sync again"
+}
+
+# same <staged> <project file> — JSON compares by content, so a reformatted settings.json is current.
+same() {
+  case "$2" in
+    *.json) [ -f "$2" ] && [ "$(jq -S . "$1")" = "$(jq -S . "$2" 2>/dev/null)" ] ;;
+    *) cmp -s "$1" "$2" ;;
+  esac
+}
 
 BLOCK_SHA=$(sha <"$T/agents-block.md")
 BEGIN_RE='^<!-- factory:begin'
@@ -69,12 +116,12 @@ write_block() {
 
 BEHIND=()
 [ "$(block_status)" = current ] || BEHIND+=("AGENTS.md (factory block)")
-for entry in "${MANAGED_FILES[@]}"; do
-  src=${entry%% *}
-  dst=${entry#* }
-  [ -f "$T/$src" ] || continue
-  cmp -s "$T/$src" "$dst" 2>/dev/null || BEHIND+=("$dst")
-done
+STAGE=$(mktemp -d)
+trap 'rm -rf "$STAGE"' EXIT
+stage "$STAGE"
+while IFS= read -r f; do
+  same "$STAGE/$f" "$f" || BEHIND+=("$f")
+done < <(cd "$STAGE" && find . -type f | sed 's#^\./##' | sort)
 
 if [ ${#BEHIND[@]} -eq 0 ]; then
   say "factory-managed files are current"
@@ -103,14 +150,14 @@ if [ "$MODE" = pr ]; then
 fi
 
 write_block
-for entry in "${MANAGED_FILES[@]}"; do
-  src=${entry%% *}
-  dst=${entry#* }
-  [ -f "$T/$src" ] || continue
-  mkdir -p "$(dirname "$dst")"
-  cp "$T/$src" "$dst"
-  case "$dst" in .factory/bin/*) chmod +x "$dst" ;; esac
-done
+# Staged again here: in a sync PR's worktree, settings.json is the base branch's, not the checkout's.
+rm -rf "$STAGE" && mkdir -p "$STAGE" && stage "$STAGE"
+while IFS= read -r f; do
+  same "$STAGE/$f" "$f" && continue
+  mkdir -p "$(dirname "$f")"
+  cp "$STAGE/$f" "$f"
+  case "$f" in .factory/bin/*) chmod +x "$f" ;; esac
+done < <(cd "$STAGE" && find . -type f | sed 's#^\./##' | sort)
 say "wrote: ${BEHIND[*]}"
 
 if [ "$MODE" = pr ]; then
@@ -123,6 +170,11 @@ if [ "$MODE" = pr ]; then
 Updates the files the software factory manages in this project to the latest factory \`main\`.
 
 Updated: ${BEHIND[*]}
+
+Sessions load the factory through \`.factory/bin/\`: every session start fetches factory \`main\`
+into the git directory, and the hooks, agents and skills run from that copy. This replaces the
+factory plugin, so its keys leave \`.claude/settings.json\`. If the plugin is still enabled in your
+user settings, disable it for this project, or every factory hook runs twice (\`factory doctor\` checks).
 
 This PR touches guardrail files, so the gate always routes it to a human. It carries no ticket
 on purpose: a sync is never mixed into ticket work.

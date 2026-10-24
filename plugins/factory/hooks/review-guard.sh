@@ -63,7 +63,7 @@ if in_review_agent; then
   # Writes through redirection are out; harmless redirects are stripped first.
   STRIPPED=$(sed -E 's#[0-9]?>&[0-9]##g; s#[0-9]?>[[:space:]]*/dev/null##g' <<<"$CMD")
   [[ $STRIPPED == *">"* ]] && block "output redirection writes files; $AGENT is read-only."
-  ALLOWED='^(git( -C [^ ]+)? (diff|log|show|status|rev-parse|merge-base|blame|ls-files|branch --show-current|worktree list)|gh (issue view|pr view|pr diff)|ls|cat|head|tail|wc|grep|rg|find|jq|sort|uniq|diff|tree|file|stat|basename|dirname|pwd|echo|cd|true|sed -n|awk|([^ ]*/)?\.factory/bin/factory (review (context|show-finding|show-confirmed)|tickets show))( |$)'
+  ALLOWED='^(git( -C [^ ]+)? (diff|log|show|status|rev-parse|merge-base|blame|ls-files|branch --show-current|worktree list)|gh (issue view|pr view|pr diff)|ls|cat|head|tail|wc|grep|rg|find|jq|sort|uniq|diff|tree|file|stat|basename|dirname|pwd|echo|cd|true|sed -n|awk|([^ ]*/)?\.factory/bin/factory (review (context|show-finding|show-confirmed)|tickets show|prompt [a-z][a-z-]*))( |$)'
   while IFS= read -r seg; do
     seg=$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$seg")
     [ -n "$seg" ] || continue

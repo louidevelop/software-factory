@@ -30,8 +30,29 @@ else
 fi
 [ -f "$ROOT/AGENTS.md" ] && grep -q '^<!-- factory:begin' "$ROOT/AGENTS.md" && ok "AGENTS.md has the factory block" || bad "AGENTS.md has no factory block (factory sync --apply)"
 [ "$(cat "$ROOT/CLAUDE.md" 2>/dev/null)" = "@AGENTS.md" ] && ok "CLAUDE.md imports AGENTS.md" || note "CLAUDE.md is not exactly '@AGENTS.md'"
-[ -f "$ROOT/.claude/settings.json" ] && jq -e '.enabledPlugins["factory@software-factory"] == true' "$ROOT/.claude/settings.json" >/dev/null 2>&1 &&
-  ok ".claude/settings.json enables the factory plugin" || bad ".claude/settings.json does not enable factory@software-factory"
+# The factory loads one of two ways: the thin layer (.claude/settings.json runs .factory/bin/fetch
+# and .factory/bin/hook) or, until a project has synced, the Claude Code plugin. The plugin's
+# enabled state is the most specific settings file that sets it: user, then project, then local.
+PLUGIN=false
+for f in "$HOME/.claude/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json"; do
+  # select, not `// empty`: `//` would treat an explicit false as unset.
+  v=$(jq -r '.enabledPlugins["factory@software-factory"] | select(. != null)' "$f" 2>/dev/null)
+  [ -n "$v" ] && PLUGIN=$v
+done
+THIN=false
+jq -e '[.hooks[]?[]?.hooks[]?.command] | any(test("\\.factory/bin/fetch")) and any(test("\\.factory/bin/hook "))' \
+  "$ROOT/.claude/settings.json" >/dev/null 2>&1 && [ -x "$ROOT/.factory/bin/fetch" ] && [ -x "$ROOT/.factory/bin/hook" ] && THIN=true
+if [ "$THIN" = true ] && [ "$PLUGIN" = true ]; then
+  ok "the factory loads through .factory/bin (thin layer)"
+  note "the factory plugin is enabled too, so every factory hook runs twice: disable factory@software-factory (/plugin) for this project"
+elif [ "$THIN" = true ]; then
+  ok "the factory loads through .factory/bin (thin layer)"
+elif [ "$PLUGIN" = true ]; then
+  ok "the factory plugin is enabled"
+  note "this project still loads the factory as a plugin; factory sync --pr moves it to the thin layer"
+else
+  bad "the factory is not loaded: .claude/settings.json has no factory hooks (factory sync --apply)"
+fi
 CHECK_YML="$ROOT/.github/workflows/check.yml"
 if [ ! -f "$CHECK_YML" ]; then
   bad ".github/workflows/check.yml missing (the gate runs it)"
