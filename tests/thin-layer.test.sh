@@ -84,6 +84,9 @@ for d in "$PLUGIN"/skills/*/; do
 done
 
 # ---------- doctor: plugin and thin layer at once ----------
+# doctor runs the fetch; from nowhere, so these tests stay offline and the next section still
+# starts with no runtime.
+export FACTORY_SOURCE="$W/nowhere"
 PATH="$TESTS/fake-gh:$PATH" FAKE_GH_DIR="$W/gh" "$FACTORY" doctor >"$W/out" 2>&1
 grep -q 'loads through .factory/bin' "$W/out" && ok || no "doctor sees the thin layer"
 grep -q 'twice' "$W/out" && no "doctor warns about the plugin when it is off" || ok

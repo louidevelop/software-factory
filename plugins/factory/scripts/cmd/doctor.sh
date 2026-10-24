@@ -61,11 +61,31 @@ elif grep -q 'workflow_dispatch' "$CHECK_YML"; then
 else
   bad "check.yml has no workflow_dispatch: trigger; the gate needs it to check a PR on the current base"
 fi
-(cd "$ROOT" && bash "$FACTORY_SCRIPTS/cmd/sync.sh" >/dev/null 2>&1) && ok "factory-managed files are current" || note "factory-managed files are behind (factory sync)"
+# The runtime: fetch it the way every session start does, so a project that cannot reach the
+# factory repo shows up here rather than as hooks blocking every tool call.
+if [ -x "$ROOT/.factory/bin/fetch" ]; then
+  if OUT=$("$ROOT/.factory/bin/fetch" 2>&1); then
+    if grep -q 'last good copy' <<<"$OUT"; then
+      note "could not update the factory runtime; sessions use the last good copy until .factory/bin/fetch reaches the factory repo"
+    else
+      ok "$(tail -n1 <<<"$OUT")"
+    fi
+  else
+    bad "the factory runtime does not fetch: $(tail -n1 <<<"$OUT" | sed 's/^factory: //')"
+  fi
+fi
+# A thin layer that is behind still works (main keeps every older layer working), so it is a note:
+# the fix is a sync PR, not something to block on.
+if BEHIND=$(cd "$ROOT" && bash "$FACTORY_SCRIPTS/cmd/sync.sh" 2>&1); then
+  ok "factory-managed files are current"
+else
+  note "factory-managed files are behind: $(sed -n 's/.*behind the factory: //p' <<<"$BEHIND") (factory sync --pr)"
+fi
 
 echo "github"
-if gh auth status >/dev/null 2>&1; then
-  ME=$(gh api user -q .login 2>/dev/null)
+# REST, like every factory call to GitHub (`gh auth status` is not, in Claude's cloud).
+ME=$(gh api user -q .login 2>/dev/null)
+if [ -n "$ME" ]; then
   ok "gh authenticated as $ME"
   SLUG=$(cd "$ROOT" && factory_repo_slug)
   if [ -n "$SLUG" ]; then
@@ -79,6 +99,31 @@ if gh auth status >/dev/null 2>&1; then
   fi
 else
   bad "gh is not authenticated"
+fi
+
+# The cloud routine is optional, so nothing here fails the doctor. The gate starts the routine only
+# when the project has both (classifier/, factory-gate.yml). Existence only: nothing a reply holds
+# is printed, and GitHub never returns a secret's value anyway. REST rather than `gh variable list` /
+# `gh secret list`, which this command may run where only REST reaches GitHub.
+echo "cloud (optional: only for running tickets in Claude's cloud)"
+if [ -n "${SLUG:-}" ]; then
+  CLOUD=0
+  for kind in variable:FACTORY_ROUTINE_URL secret:FACTORY_ROUTINE_TOKEN; do
+    name=${kind#*:}
+    if (cd "$ROOT" && factory_api "actions/${kind%%:*}s/$name" >/dev/null 2>&1); then
+      ok "${kind%%:*} $name"
+      CLOUD=$((CLOUD + 1))
+    else
+      note "no ${kind%%:*} $name (see the cloud setup in the factory-bootstrap skill)"
+    fi
+  done
+  case $CLOUD in
+    2) ok "the gate starts the cloud routine after merges and while waiting for the owner" ;;
+    1) note "the gate needs both FACTORY_ROUTINE_URL and FACTORY_ROUTINE_TOKEN to start the cloud routine" ;;
+    *) note "local only: the gate does not start a cloud routine" ;;
+  esac
+else
+  note "skipped: no GitHub repo to read"
 fi
 
 echo
