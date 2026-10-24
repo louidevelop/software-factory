@@ -1,0 +1,9 @@
+name: Software factory gate
+description: Classify a PR's impact, label it, wait for the other checks, and merge when the gate passes (owner approval for high impact).
+inputs:
+  github-token:
+    description: Token with contents/pull-requests/issues write on the calling repo.
+    default: ${{ github.token }}
+runs:
+  using: node24
+  main: index.mjs

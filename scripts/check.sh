@@ -37,7 +37,7 @@ bash tests/scripts.test.sh || fail "script tests"
 
 if [ -d classifier ]; then
   step "classifier tests"
-  node --test classifier/ || fail "classifier tests"
+  node --test classifier/*.test.mjs || fail "classifier tests"
 fi
 
 if [ -f scripts/validate-config.mjs ]; then

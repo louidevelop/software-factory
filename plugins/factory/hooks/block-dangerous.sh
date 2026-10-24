@@ -68,6 +68,12 @@ if matches 'git +(reset +--hard|clean +-[a-zA-Z]*f|checkout +-- +\.|restore +[^|
   block "history-destroying git command."
 fi
 
+# ---------- Merging is the gate's job ----------
+# An agent never merges, approves, or bypasses the factory gate, whoever it is logged in as.
+if matches '(^|[ ;&|(])gh +pr +(merge|review)\b|gh +api\b.*/pulls/[0-9]+/(merge|reviews)\b'; then
+  block "merging or reviewing a PR. The factory gate merges; a human approves."
+fi
+
 # ---------- Filesystem ----------
 if matches '(^|[ ;&|(])(sudo +)?rm +(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|-r +-f|-f +-r|--recursive +--force|--force +--recursive)\b'; then
   block "'rm -rf'. Delete specific files with plain rm, or ask the human."

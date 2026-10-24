@@ -43,7 +43,7 @@ for cmd in \
   'cat .env' 'source .env.local' 'cp .env /tmp/x' 'grep KEY .env' 'printenv' 'env | grep TOKEN' \
   'echo $OPENAI_API_KEY' 'git push --force origin x' 'git push -f' 'git reset --hard HEAD~1' \
   'git clean -fd' 'git branch -D x' 'rm -rf build' 'rm -fr /' 'sudo ls' 'npm publish' \
-  'cargo publish' 'psql -c "DROP TABLE users"' 'echo "truncate table events"' 'migrate --remote'; do
+  'cargo publish' 'gh pr merge 3 --squash' 'gh pr review 3 --approve' 'gh api -X PUT repos/o/r/pulls/3/merge' 'psql -c "DROP TABLE users"' 'echo "truncate table events"' 'migrate --remote'; do
   expect "blocks: $cmd" block-dangerous.sh 2 "BLOCKED" "$(bash_input "$cmd")"
 done
 expect "project reason is shown" block-dangerous.sh 2 "applied by a human" "$(bash_input 'migrate --remote')"
@@ -57,7 +57,7 @@ expect "blocks Grep on .env.production" block-dangerous.sh 2 "Secrets" \
 for cmd in \
   'cat .env.example' 'git push -u origin ticket/12-x' 'git status' 'rm build/out.txt' \
   'npm install left-pad' 'uv add httpx' 'echo environment' 'grep -r env src' 'git checkout -b x' \
-  'ls -la' 'migrate --local'; do
+  'ls -la' 'migrate --local' 'gh pr create --fill' 'gh pr view 3' 'gh pr update-branch 3'; do
   expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
 done
 expect "allows Read .env.example" block-dangerous.sh 0 "" "$(file_input Read "$PROJECT/.env.example")"
