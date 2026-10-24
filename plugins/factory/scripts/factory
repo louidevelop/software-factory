@@ -15,6 +15,8 @@ usage: factory <command> [args]
                          labels, merge settings, branch protection (shows changes first)
   sync [--apply | --pr]  compare factory-managed files with the latest factory;
                          --apply writes them, --pr opens a "factory sync" PR
+  tickets feature|create|next|list
+                         GitHub plumbing for specs and tickets (sub-issues, blocked-by)
   start [<issue> | next] pick up a ticket: lock, preflight, prerequisites, drift, worktree
   review <issue>         local review: reviewer + one judge per blocking finding
   review <issue> --resolve
@@ -28,7 +30,7 @@ USAGE
 cmd=${1:-help}
 shift || true
 case "$cmd" in
-  doctor | github-setup | sync | start | review | open-pr | run | block)
+  doctor | github-setup | sync | tickets | start | review | open-pr | run | block)
     exec bash "$FACTORY_SCRIPTS/cmd/$cmd.sh" "$@"
     ;;
   help | -h | --help) usage ;;
