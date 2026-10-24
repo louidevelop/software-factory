@@ -32,21 +32,20 @@ last line is `WORKTREE=<path>`: `cd` there and work ONLY in that worktree for th
   `.github/pull_request_template.md` (Verification: one proof line per acceptance criterion;
   Decisions; Dependencies added; Migrations). Leave Local review empty.
 
-## 3. Local review — never brief the reviewer
+## 3. Local review — you trigger it, you never brief it
 
-```bash
-$FACTORY review <n>
-```
+The reviewer and judges are this plugin's subagents. You start them; they fetch the ticket, the
+spec and the diff themselves. A hook blocks any spawn message other than the exact line
+`factory review` prints, keeps them read-only, and stops you from writing findings or verdicts.
 
-The script starts the reviewer and judges itself, with a fixed prompt carrying only the ticket
-number and branch. Do NOT summarise your work for it, and do not run the review as a subagent you
-prompt: the point is that the implementer cannot frame the review. Read its result
-(`review.json` in the same state dir). Fix exactly the `confirmed` findings — none of the
-non-blocking ones — commit, then:
-
-```bash
-$FACTORY review <n> --resolve
-```
+1. Commit everything, then `$FACTORY review begin <n>` and spawn `factory:factory-reviewer` with
+   exactly the line it prints (`Review ticket #<n>`).
+2. `$FACTORY review judges` — spawn one `factory:factory-judge` per printed line, all in parallel,
+   each with exactly that line.
+3. `$FACTORY review assemble`. It prints the confirmed blocking findings: fix exactly those (none of
+   the non-blocking ones), commit, then `$FACTORY review resolve-begin`, spawn one
+   `factory:factory-resolver` per printed line in parallel, and `$FACTORY review assemble --resolve`.
+   What stays unresolved goes to the human in the PR; do not loop on it.
 
 ## 4. Open the PR
 

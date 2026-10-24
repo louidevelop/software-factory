@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # run — the unattended loop, one ticket at a time:
-#   start → implement (fresh session, up to maxAttempts) → review → fix → resolve → open-pr → next
+#   start → one fresh `claude -p` session per attempt (implement, then the local review through
+#   the factory's reviewer/judge/resolver SUBAGENTS, fixes, resolve) → open-pr → next
 #   factory run [<parent-issue>]
-# Every implementation and fix session is a brand-new `claude -p` context in auto permission
-# mode with prompts auto-denied; the plugin's hooks are the second layer. Run it as the machine
-# user (GH_TOKEN), never as an owner. Stops when nothing is ready (or the base branch is red).
+# Each attempt is a brand-new context in auto permission mode with prompts auto-denied; the
+# plugin's hooks are the second layer and keep the review subagents unbriefed and read-only.
+# Run it as the machine user (GH_TOKEN), never as an owner. Stops when nothing is ready (or the
+# base branch is red). This loop is the only part of the factory that needs headless claude -p.
 set -u
 # shellcheck source=../common.sh
 . "$FACTORY_SCRIPTS/common.sh"
@@ -46,6 +48,11 @@ describe_state() { # what the previous attempt left behind, for the next fresh s
   [ -n "$(git status --porcelain)" ] && msgs+=("UNCOMMITTED work is in the tree. Read \`git status\` and \`git diff\`; keep what is right, fix or discard the rest.")
   [ "$(git rev-list --count "origin/$base..HEAD")" -gt 0 ] && msgs+=("Commits from earlier attempts are on the branch (\`git log origin/$base..HEAD\`). Build on them.")
   [ -f "$state/pr-body.md" ] || msgs+=("No PR description at $state/pr-body.md yet.")
+  if [ ! -f "$state/review.json" ]; then
+    msgs+=("The local review has not been assembled yet (step 6).")
+  elif [ "$(jq -r .head "$state/review.json")" != "$(git rev-parse HEAD)" ]; then
+    msgs+=("The local review is for an older commit: if confirmed findings were fixed, run resolve-begin and assemble --resolve; otherwise begin the review again.")
+  fi
   [ -n "${CHECK_TAIL:-}" ] && msgs+=("The check is RED. Last lines:"$'\n```\n'"$CHECK_TAIL"$'\n```')
   [ ${#msgs[@]} -eq 0 ] && msgs=("None — fresh start.")
   printf '%s\n\n' "${msgs[@]}"
@@ -87,7 +94,8 @@ while :; do
       DONE=2
       break
     fi
-    if [ -z "$(git status --porcelain)" ] && [ "$(git rev-list --count "origin/$BASE..HEAD")" -gt 0 ] && [ -f "$STATE/pr-body.md" ]; then
+    if [ -z "$(git status --porcelain)" ] && [ "$(git rev-list --count "origin/$BASE..HEAD")" -gt 0 ] && [ -f "$STATE/pr-body.md" ] &&
+      [ "$(jq -r .head "$STATE/review.json" 2>/dev/null)" = "$(git rev-parse HEAD)" ]; then
       if CHECK_OUT=$(bash -c "$CHECK" 2>&1); then
         DONE=1
         break
@@ -101,25 +109,6 @@ while :; do
     continue
   fi
 
-  bash "$FACTORY_SCRIPTS/cmd/review.sh" "$N" || {
-    factory_block_ticket "$N" "local review failed to run; see the runner's output."
-    continue
-  }
-  CONFIRMED=$(jq '[.confirmed[]]' "$STATE/review.json")
-  if [ "$(jq length <<<"$CONFIRMED")" -gt 0 ]; then
-    say "#$N: $(jq length <<<"$CONFIRMED") confirmed blocking finding(s) — fix session"
-    PROMPT=$(fill fix.md N="$N" BRANCH="$BRANCH" STATE="$STATE" FACTORY="$FACTORY" FINDINGS="$CONFIRMED")
-    claude -p "$PROMPT" "${CLAUDE_ARGS[@]}" </dev/null >"$STATE/logs/fix-$(date +%Y%m%d-%H%M%S).log" 2>&1
-    is_blocked "$N" && continue
-    [ -z "$(git status --porcelain)" ] && bash -c "$CHECK" >/dev/null 2>&1 || {
-      factory_block_ticket "$N" "the fix session left a dirty tree or a red check."
-      continue
-    }
-    bash "$FACTORY_SCRIPTS/cmd/review.sh" "$N" --resolve || {
-      factory_block_ticket "$N" "the resolution check failed to run."
-      continue
-    }
-  fi
   bash "$FACTORY_SCRIPTS/cmd/open-pr.sh" "$N" || factory_block_ticket "$N" "opening the PR failed; see the runner's output."
   cd "$MAIN" || exit 1
 done

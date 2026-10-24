@@ -1,13 +1,23 @@
 {
   "extraKnownMarketplaces": {
     "software-factory": {
-      "source": { "source": "github", "repo": "louidevelop/software-factory" }
+      "source": {
+        "source": "github",
+        "repo": "louidevelop/software-factory"
+      }
     }
   },
   "enabledPlugins": {
     "factory@software-factory": true
   },
   "permissions": {
+    "allow": [
+      "Bash(.factory/bin/factory review *)",
+      "Bash(gh issue view *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",

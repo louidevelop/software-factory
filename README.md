@@ -16,10 +16,11 @@ Tech-general: the factory defines a contract each project fills with its own sta
 
 | Path | What |
 |---|---|
-| `plugins/factory/hooks/` | after-edit (fix + feedback), stop-gate (check must be green), block-dangerous (secrets, history, merging, project extras) |
+| `plugins/factory/hooks/` | after-edit (fix + feedback), stop-gate (check must be green), block-dangerous (secrets, history, merging, project extras), review-guard (unbriefed, read-only review subagents) |
 | `plugins/factory/skills/` | `factory-bootstrap`, `feature-spec`, `create-tickets`, `start-ticket`, `run-tickets` |
 | `plugins/factory/scripts/factory` | the CLI every skill and the loop use: `doctor`, `github-setup`, `sync`, `tickets`, `start`, `review`, `open-pr`, `run`, `block`, `archive-specs` |
-| `plugins/factory/prompts/` | fixed prompts for implement, fix, reviewer, judge, resolve |
+| `plugins/factory/agents/` | `factory-reviewer`, `factory-judge`, `factory-resolver` subagents — triggered by the main agent, never briefed by it |
+| `plugins/factory/prompts/` | the implementation prompt for unattended runs |
 | `plugins/factory/templates/` | config, `AGENTS.md` + managed block, settings, spec, ticket, PR, gate workflow, shim |
 | `classifier/` | the gate: impact rules, owner-approval gate, GitHub Action (`uses: louidevelop/software-factory/classifier@main`) |
 | `examples/` | outfit-assistant and byggtalk as worked examples of the contract |
@@ -39,6 +40,6 @@ classic token with `repo` scope (fine-grained tokens cannot reach repos where it
 
 ## Working on the factory
 
-Every change lands through a PR the owner reviews; projects follow `main`, so `main` must always
-work. Run `scripts/check.sh` (CI runs the same). Rules for agents: `AGENTS.md`.
+Commit straight to `main` (no PRs unless the owner asks); projects follow `main`, so run
+`scripts/check.sh` before every push (CI runs the same). Rules for agents: `AGENTS.md`.
 To try an unmerged factory branch in a project: `export FACTORY_HOME=~/code/software-factory/plugins/factory`.

@@ -35,7 +35,7 @@ bash tests/hooks.test.sh || fail "hook tests"
 step "script tests"
 bash tests/scripts.test.sh || fail "script tests"
 
-step "review tests (fake claude)"
+step "review record tests"
 bash tests/review.test.sh || fail "review tests"
 
 if [ -d classifier ]; then

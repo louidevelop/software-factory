@@ -8,9 +8,10 @@ reusable GitHub workflow + classifier action, and the docs that decided their sh
 
 ## The loop
 
-- Run `scripts/check.sh` after every change. It must be green before a PR; CI runs the identical script.
+- Run `scripts/check.sh` after every change. It must be green before every push; CI runs the identical script.
 - Every project follows factory `main`: a broken `main` breaks every project on its next session.
-  Every change lands through a PR the owner reviews. Never push to `main`.
+  While the factory is young, commit and push straight to `main` — no PRs unless the owner asks
+  for one. `scripts/check.sh` green is the bar.
 
 ## Constraints that are easy to break
 
@@ -25,8 +26,10 @@ reusable GitHub workflow + classifier action, and the docs that decided their sh
   (`hooks/lib.sh`) and the classifier implement it identically; change both or neither.
 - **The classifier only escalates.** No rule, input, or PR content may lower a rating. Errors → high.
   Config is read from the base branch, never from the PR.
-- **The reviewer is never briefed by the implementer.** Its prompt is fixed and carries only the
-  ticket number and branch; it gathers its own context.
+- **The reviewer is never briefed by the implementer.** The review runs as plugin subagents
+  (`agents/`) that the main agent triggers with an exact one-line message — `hooks/review-guard.sh`
+  enforces the wording, keeps them read-only, and keeps everyone else from writing the review record.
+  They gather the ticket, spec and diff themselves.
 
 ## Tests
 

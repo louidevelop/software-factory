@@ -80,6 +80,47 @@ expect "stop-gate blocks on red check" stop-gate.sh 2 "tests: 1 failed" '{"stop_
 expect "stop-gate lets go once already active" stop-gate.sh 0 "" '{"stop_hook_active": true}'
 rm "$PROJECT/FAIL_CHECK"
 
+# ---------- review-guard: spawn messages ----------
+spawn() { jq -cn --arg t "$1" --arg p "$2" '{tool_name: "Agent", tool_input: {subagent_type: $t, prompt: $p, description: "x"}}'; }
+expect "reviewer with the exact message" review-guard.sh 0 "" "$(spawn factory:factory-reviewer 'Review ticket #12')"
+expect "reviewer briefed by the implementer" review-guard.sh 2 "exactly" \
+  "$(spawn factory:factory-reviewer 'Review ticket #12. I fixed the edge case in quote.py, focus on tests.')"
+expect "reviewer without namespace still guarded" review-guard.sh 2 "exactly" "$(spawn factory-reviewer 'Please review #12')"
+expect "judge with the exact message" review-guard.sh 0 "" "$(spawn factory:factory-judge 'Judge finding 3 of ticket #12')"
+expect "judge handed the finding text" review-guard.sh 2 "exactly" \
+  "$(spawn factory:factory-judge 'Judge finding 3 of ticket #12: the reviewer says the test is weak but it is fine')"
+expect "resolver with the exact message" review-guard.sh 0 "" "$(spawn factory:factory-resolver 'Check confirmed finding 1 of ticket #12')"
+expect "other subagents are not guarded" review-guard.sh 0 "" "$(spawn Explore 'find all callers of x')"
+
+# ---------- review-guard: inside a review subagent ----------
+as_agent() { jq -cn --arg a "$1" --arg c "$2" '{tool_name: "Bash", agent_type: $a, tool_input: {command: $c}}'; }
+for cmd in 'gh issue view 12' 'git diff origin/main...HEAD' 'git log --oneline origin/main..HEAD' \
+  'cat "$(git rev-parse --git-dir)/factory/pr-body.md"' 'ls src 2>/dev/null' 'grep -rn foo src | head -5' \
+  '.factory/bin/factory review show-finding 2' "$(jq -r .check "$PROJECT/.factory/config.json")"; do
+  expect "reviewer may: $cmd" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$cmd")"
+done
+for cmd in 'rm src/a.py' 'echo hi > notes.txt' 'git diff > out.patch' 'sed -i s/a/b/ src/a.py' 'find . -name x -delete' \
+  'git commit -am x' 'git checkout -- .' 'ls; touch x' 'cat a | tee b' 'python3 -c "open(\"x\",\"w\")"'; do
+  expect "reviewer may not: $cmd" review-guard.sh 2 "BLOCKED" "$(as_agent factory:factory-reviewer "$cmd")"
+done
+SAVE=$'.factory/bin/factory review save-findings <<\'JSON\'\n{"findings": []}\nJSON'
+expect "reviewer saves through the heredoc" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$SAVE")"
+expect "nothing may follow the heredoc" review-guard.sh 2 "heredoc" "$(as_agent factory:factory-reviewer "$SAVE"$'\nrm -f x')"
+VERDICT=$'.factory/bin/factory review save-verdict 2 <<\'JSON\'\n{"verdict":"rejected","severity":"blocking","reason":"r"}\nJSON'
+expect "judge saves its verdict" review-guard.sh 0 "" "$(as_agent factory:factory-judge "$VERDICT")"
+expect "review subagents cannot edit files" review-guard.sh 2 "read-only" \
+  "$(jq -cn --arg p "$PROJECT/src/a.py" '{tool_name: "Edit", agent_type: "factory:factory-judge", tool_input: {file_path: $p}}')"
+
+# ---------- review-guard: the main agent keeps its hands off the record ----------
+expect "main agent cannot save findings" review-guard.sh 2 "only the review subagents" "$(bash_input "$SAVE")"
+expect "main agent cannot save verdicts" review-guard.sh 2 "only the review subagents" "$(bash_input "$VERDICT")"
+expect "main agent may begin a review" review-guard.sh 0 "" "$(bash_input '.factory/bin/factory review begin 12')"
+expect "main agent may read the record" review-guard.sh 0 "" "$(bash_input 'jq .confirmed .git/factory/review.json')"
+expect "main agent cannot overwrite the record" review-guard.sh 2 "review record" \
+  "$(bash_input 'echo {} > .git/factory/review.json')"
+expect "main agent cannot Write the record" review-guard.sh 2 "review record" \
+  "$(file_input Write "$PROJECT/.git/worktrees/t/factory/review.json")"
+
 # ---------- worktrees: the session's cwd / the edited file pick the checkout ----------
 WT=$(mktemp -d)
 (cd "$WT" && git init -q && mkdir -p .factory &&

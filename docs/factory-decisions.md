@@ -177,7 +177,7 @@ Current-state map: `factory-map.md`.
   - shell linted
 - Repo-resident files (the `AGENTS.md` factory block between `<!-- factory:begin vX -->` / `<!-- factory:end -->` markers, templates, the CI caller file) are synced through a "factory sync" PR. Pickup opens it when a project is behind and the ticket continues meanwhile. A sync is never mixed into a ticket PR, and it is always high impact.
 - Local prerequisites: `bash`, `git`, `gh`, `jq`, `claude`; no language runtime required by the factory. The classifier runs only in CI, as a zero-dependency Node script.
-- The factory does not run its own pipeline. Factory changes are plain PRs, and the human reviews every one.
+- The factory does not run its own pipeline. (Revised: factory changes go straight to `main` without PRs unless the owner asks — see Revisions.)
 
 ## Walkthrough status
 
@@ -211,3 +211,19 @@ Each deviation is forced by a platform fact found while building; the decision's
   the project dir, so a session started in the main checkout still gates the worktree it works in.
 - **Scripts target macOS's bash 3.2** (no bash-4 features; empty arrays guarded under `set -u`).
 - **Glob dialect** adds `{a,b}`; empty alternatives (`{a,}`) are not allowed (macOS ERE rejects them).
+
+## Revisions (2026-10-24, after the build)
+
+- **The local review runs as plugin subagents, not headless `claude -p`.** `factory:factory-reviewer`,
+  `factory:factory-judge` (one per blocking finding, in parallel) and `factory:factory-resolver` are
+  spawned by the main agent — but only with an exact one-line message (`Review ticket #12`,
+  `Judge finding 3 of ticket #12`, `Check confirmed finding 1 of ticket #12`); they fetch the ticket,
+  spec and diff themselves. `hooks/review-guard.sh` enforces the wording, keeps the subagents
+  read-only (allow-listed commands; the only write is their own `factory review save-*` heredoc), and
+  blocks anyone else from writing findings, verdicts, resolutions or `review.json`. Interactive work
+  now needs no headless sessions at all; the unattended loop needs one per attempt, which also runs
+  the review. Reason: the user's call — fewer separate sessions, and the review stays in the session
+  that triggered it. What was given up: the implementer could still bypass a hook deliberately (a hook
+  is a guardrail, not a sandbox), where a separate process could not be briefed at all.
+- **No PRs for factory changes** while the factory is young: commit straight to `main` unless the
+  owner asks for a PR. Projects keep the full ticket → PR → gate flow.

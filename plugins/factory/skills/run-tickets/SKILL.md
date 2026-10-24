@@ -21,8 +21,9 @@ $FACTORY run [<feature parent issue>]
 ```
 
 What it does, per ticket: `start next` (lock, prerequisites, fresh worktree, base must be green) →
-a fresh implementation session (up to `run.maxAttempts`, each told the state the previous one left)
-→ `review` → a fix session for confirmed blocking findings → `review --resolve` → `open-pr`. A ticket
+one fresh headless session per attempt (up to `run.maxAttempts`, each told the state the previous
+one left) that implements, runs the local review through the reviewer/judge/resolver subagents,
+fixes confirmed findings → `open-pr`. A ticket
 that blocks itself, or fails every attempt, is labelled `blocked` with the reason, and the loop moves
 on. It stops when nothing is ready or the base branch is red.
 

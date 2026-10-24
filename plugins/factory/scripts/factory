@@ -18,9 +18,8 @@ usage: factory <command> [args]
   tickets feature|create|next|list
                          GitHub plumbing for specs and tickets (sub-issues, blocked-by)
   start [<issue> | next] pick up a ticket: lock, preflight, prerequisites, drift, worktree
-  review <issue>         local review: reviewer + one judge per blocking finding
-  review <issue> --resolve
-                         after fixes: a judge checks each confirmed finding is resolved
+  review begin <issue> | judges | assemble [--resolve] | resolve-begin
+                         local review through the reviewer/judge/resolver subagents
   open-pr <issue>        push the branch and open the PR with the review attached
   run [<parent-issue>]   unattended loop: start → implement → review → fix → open-pr, repeat
   block <issue> <reason> label a ticket blocked and comment the reason

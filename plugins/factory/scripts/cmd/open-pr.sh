@@ -29,9 +29,9 @@ for s in Verification Decisions; do
 done
 
 REVIEW="$STATE/review.json"
-[ -f "$REVIEW" ] || die "no local review yet: run factory review $N"
+[ -f "$REVIEW" ] || die "no local review yet: factory review begin $N (then the reviewer and judges, then assemble)"
 [ "$(jq -r .head "$REVIEW")" = "$(git rev-parse HEAD)" ] ||
-  die "the local review is for an older commit: run factory review $N --resolve after fixes (or factory review $N)"
+  die "the local review is for an older commit: after fixing confirmed findings run factory review resolve-begin and assemble --resolve; otherwise review again"
 
 # The draft's own "## Local review" (template placeholder) is replaced by the real one.
 BODY=$(awk '/^## Local review/ { exit } { print }' "$DRAFT")
@@ -41,7 +41,7 @@ BODY+=$'\n'"$(jq -r '
   def list(xs): if (xs | length) == 0 then "- None" else (xs | map(item) | join("\n")) end;
   "## Local review\n\n" +
   "Unresolved blocking findings: \(.unresolved | length)\n\n" +
-  "Reviewer and judges ran in fresh contexts on \(.head[0:7]) (model: \(.model)).\n\n" +
+  "Reviewer and judges ran as unbriefed, read-only subagents on \(.head[0:7]) (model: \(.model)).\n\n" +
   "**Confirmed blocking, fixed:**\n" + list(.fixed) + "\n\n" +
   (if (.unresolved | length) > 0 then "**Confirmed blocking, NOT resolved — the human decides:**\n" + list(.unresolved) + "\n\n" else "" end) +
   "**Non-blocking (unverified, not fixed):**\n" + list(.nonblocking) + "\n\n" +
