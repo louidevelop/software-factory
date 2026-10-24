@@ -258,7 +258,7 @@ issue 7 agent-task
 reply GET "repos/o/r/pulls?state=open&head=o:ticket/6-ticket-6" '[]'
 list "$(li 6 agent-task)"
 fresh_calls
-PATH="$W/bin:$PATH" FAKE_CLAUDE=done FACTORY_BIN="$FACTORY" "$FACTORY" run next >/dev/null 2>"$W/err"
+PATH="$W/bin:$PATH" FAKE_CLAUDE="done" FACTORY_BIN="$FACTORY" "$FACTORY" run next >/dev/null 2>"$W/err"
 [ $? -eq 0 ] && ok || no "run: exit 0 once the PR is open ($(tail -3 "$W/err"))"
 grep -q "ticket #6" "$P/.git/worktrees/ticket-6/factory/prompt-seen" && ok || no "run: the session gets the attempt's prompt"
 called POST repos/o/r/pulls "head=ticket/6-ticket-6" && ok || no "run: finish opens the PR when the session did not"
