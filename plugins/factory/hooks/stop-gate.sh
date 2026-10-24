@@ -7,6 +7,7 @@ set -u
 
 INPUT=$(cat)
 factory_require_jq
+export FACTORY_ROOT_HINT # read by factory_root in lib.sh
 FACTORY_ROOT_HINT=$(jq -r '.cwd // empty' <<<"$INPUT")
 CONFIG=$(factory_config)
 [ -f "$CONFIG" ] || exit 0

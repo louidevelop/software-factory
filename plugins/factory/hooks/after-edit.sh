@@ -10,6 +10,7 @@ INPUT=$(cat)
 factory_require_jq
 FILE=$(jq -r '.tool_input.file_path // empty' <<<"$INPUT")
 [ -n "$FILE" ] && [ -f "$FILE" ] || exit 0
+export FACTORY_ROOT_HINT # read by factory_root in lib.sh
 FACTORY_ROOT_HINT=$(dirname "$FILE")
 CONFIG=$(factory_config)
 [ -f "$CONFIG" ] || exit 0
