@@ -127,14 +127,6 @@ async function main() {
   let pr = await gh.get(`${R}/pulls/${number}`);
   if (pr.state !== "open") return log("PR is not open; nothing to do");
 
-  // New commits void the owner's go-ahead: it covered the commits they looked at.
-  let dropped = false;
-  if (event.action === "synchronize" && pr.labels?.some((l) => l.name === MERGE_LABEL)) {
-    await gh.del(`${R}/issues/${number}/labels/${encodeURIComponent(MERGE_LABEL)}`);
-    dropped = true;
-    log(`new commits: removed the ${MERGE_LABEL} label`);
-  }
-
   let result;
   try {
     const config = await readBaseConfig(pr.base.ref);
@@ -150,9 +142,6 @@ async function main() {
   log(`risk: ${result.risk}`, JSON.stringify(result.reasons));
   await setRiskLabel(result.risk);
   await upsertComment(render(result, "waiting for the other checks…"));
-  if (dropped) {
-    await mentionOwners(result.owners, `new commits were pushed after the \`${MERGE_LABEL}\` label was added, so the gate removed it. Review the new commits and add it again to merge.`);
-  }
 
   const checks = await waitForChecks(pr.head.sha);
   pr = await gh.get(`${R}/pulls/${number}`); // fresh: the head may have moved while waiting
@@ -160,11 +149,19 @@ async function main() {
   const events = (await gh.paginate(`${R}/issues/${number}/events`)).map((e) => ({
     event: e.event, label: e.label?.name, actor: e.actor?.login, created_at: e.created_at,
   }));
-  const decision = gate({ risk: result.risk, owners: result.owners, draft: pr.draft, labels, events, checks });
+  // The head reached GitHub when its first check suite was created (the agent cannot set that).
+  const suites = (await gh.get(`${R}/commits/${pr.head.sha}/check-suites`)).check_suites ?? [];
+  const headPushedAt = suites.map((s) => s.created_at).filter(Boolean).sort()[0] ?? null;
+  const decision = gate({ risk: result.risk, owners: result.owners, draft: pr.draft, labels, events, headPushedAt, checks });
   log(decision.summary);
   if (!decision.merge) {
     await upsertComment(render(result, decision.summary));
-    if (decision.needsOwner) await askOwners(result.owners, pr.base.ref);
+    if (decision.stale) {
+      await gh.del(`${R}/issues/${number}/labels/${encodeURIComponent(MERGE_LABEL)}`).catch(() => {});
+      await mentionOwners(result.owners, `new commits were pushed after the \`${MERGE_LABEL}\` label was added, so the gate removed it. Review the new commits and add it again to merge.`);
+    } else if (decision.needsOwner) {
+      await askOwners(result.owners, pr.base.ref);
+    }
     if (!decision.pass) process.exitCode = 1;
     return;
   }
