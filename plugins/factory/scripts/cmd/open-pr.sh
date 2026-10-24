@@ -18,7 +18,8 @@ BASE=$(factory_base_branch)
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 case "$BRANCH" in ticket/"$N"-*) ;; *) die "branch $BRANCH is not ticket #$N's branch" ;; esac
 
-# Done criteria, the check included: a PR never opens red.
+# Done criteria, the check included: a PR never opens red, nor in conflict with the current base.
+git fetch -q origin "$BASE" || warn "could not fetch $BASE; conflicts are judged against the last fetched copy"
 say "checking the done criteria (with \`$(factory_cfg '.check')\`)"
 PROBLEMS=$(factory_done_problems)
 [ -z "$PROBLEMS" ] || die "not ready for a PR:"$'\n'"$PROBLEMS"

@@ -43,6 +43,7 @@ if ticket_has_label "$N" blocked; then
 fi
 
 # Done? The cheap criteria first; open-pr runs them again with the check, so it runs once.
+git fetch -q origin "$BASE" || warn "could not fetch $BASE; conflicts are judged against the last fetched copy"
 PROBLEMS=$(factory_done_problems --no-check)
 if [ -z "$PROBLEMS" ]; then
   if OUT=$(bash "$FACTORY_SCRIPTS/cmd/open-pr.sh" "$N" 2>&1); then

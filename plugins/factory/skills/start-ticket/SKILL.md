@@ -41,8 +41,10 @@ The reviewer and judges are the factory's subagents. You start them; they fetch 
 spec and the diff themselves. A hook blocks any spawn message other than the exact line
 `factory review` prints, keeps them read-only, and stops you from writing findings or verdicts.
 
-1. Commit everything, then `$FACTORY review begin <n>` and spawn `factory-reviewer` with
-   exactly the line it prints (`Review ticket #<n>`).
+1. Commit everything and merge the current base (`git fetch origin <base> && git merge
+   origin/<base>`, never a rebase; resolve any conflicts, run the check, commit): a PR that
+   conflicts with its base does not open. Then `$FACTORY review begin <n>` and spawn
+   `factory-reviewer` with exactly the line it prints (`Review ticket #<n>`).
 2. `$FACTORY review judges <n>` — spawn one `factory-judge` per printed line, all in parallel,
    each with exactly that line.
 3. `$FACTORY review assemble <n>`. It prints the confirmed blocking findings: fix exactly those (none of

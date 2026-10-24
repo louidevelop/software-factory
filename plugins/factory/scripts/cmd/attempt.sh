@@ -6,7 +6,8 @@
 # Without an issue it picks, in this order:
 #   1. a ticket labelled `rework` (its PR went red or conflicts with the base);
 #   2. one of our in-progress tickets whose last attempt ended unfinished or went stale (no
-#      recent attempt start or push: a crashed run), and that has no open PR;
+#      recent attempt start or push: a crashed run), and that has no open PR; or whose open PR
+#      conflicts with the base (labelled `rework` here: the gate never runs on such a PR);
 #   3. the next ready ticket (`tickets next`).
 # In place (the default in Claude's cloud, where CLAUDE_CODE_REMOTE=true) the ticket's branch is
 # checked out in this clone; otherwise it gets a worktree, as `factory start` does.
@@ -110,7 +111,7 @@ pool() { # pool <label> — open tickets in the pool with that label, not blocke
 }
 SKIP=" "
 pick() {
-  local n last
+  local n last pr
   for n in $(pool rework); do
     [[ $SKIP == *" $n "* ]] || {
       say "#$n needs rework"
@@ -123,7 +124,19 @@ pick() {
     last=$(comments "$n" | jq -c "$LAST_ATTEMPT") || continue
     [ -n "$last" ] || continue # locked by an interactive `factory start`, not by an attempt
     b=$(attempt_branch "$last")
-    [ -n "$b" ] && [ -n "$(factory_open_pr "$b")" ] && continue # waiting for the gate or the owner
+    pr=$([ -n "$b" ] && factory_open_pr "$b")
+    if [ -n "$pr" ]; then
+      # Waiting for the gate or the owner, unless it conflicts with the base: GitHub runs no
+      # pull_request workflow on a conflicting PR, so the gate cannot send it back for rework.
+      # (mergeable is null while GitHub computes it: then it waits for a later run.)
+      [ "$(factory_api "pulls/$pr" -q '.mergeable')" = false ] || continue
+      factory_label_add "$n" rework || warn "could not label #$n rework"
+      factory_comment "$n" "Sent back for rework by \`factory attempt\`: PR #$pr conflicts with \`$BASE\`." ||
+        warn "could not comment on #$n"
+      say "#$n: PR #$pr conflicts with $BASE; resuming it as rework"
+      echo "$n"
+      return 0
+    fi
     say "#$n: resuming its unfinished or stalled attempt"
     echo "$n"
     return 0
@@ -233,7 +246,7 @@ fill() {
   printf '%s' "$out$s"
 }
 out=$(cat "$FACTORY_DIR/prompts/implement.md")
-for kv in N="$N" BRANCH="$BRANCH" DIR="$DIR" STATE="$STATE" PRIOR="$PRIOR"; do
+for kv in N="$N" BRANCH="$BRANCH" BASE="$BASE" DIR="$DIR" STATE="$STATE" PRIOR="$PRIOR"; do
   out=$(fill "$out" "${kv%%=*}" "${kv#*=}")
 done
 printf '%s\n' "$out"

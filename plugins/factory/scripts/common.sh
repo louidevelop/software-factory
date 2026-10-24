@@ -190,14 +190,22 @@ factory_block_ticket() {
 
 # factory_done_problems [--no-check] — run inside the ticket's checkout. One markdown bullet per
 # unmet done criterion (what open-pr and finish require); no output when the ticket is done.
+# Conflicts are judged against origin/<base> as last fetched: the callers fetch it first.
 factory_done_problems() {
-  local base state n branch draft s check out
+  local base state n branch draft s check out clash
   base=$(factory_base_branch)
   state=$(factory_state_dir)
   n=$(cat "$state/ticket" 2>/dev/null)
   branch=$(git rev-parse --abbrev-ref HEAD)
   [ -z "$(git status --porcelain)" ] || echo "- The tree has uncommitted changes: commit them, or discard what is wrong."
   [ "$(git rev-list --count "origin/$base..HEAD" 2>/dev/null || echo 0)" -gt 0 ] || echo "- No commits on $branch yet."
+  # A PR that conflicts with its base never gets the gate: GitHub runs no pull_request workflow on
+  # it. merge-tree merges in memory (exit 1: conflicts); it touches neither the tree nor the index.
+  clash=$(git merge-tree --write-tree --name-only --no-messages "origin/$base" HEAD 2>/dev/null)
+  if [ $? -eq 1 ]; then
+    clash=$(sed -n '2,$p' <<<"$clash" | sed '/^$/,$d' | paste -sd ',' - | sed 's/,/, /g')
+    echo "- $branch conflicts with the current $base in: $clash. Merge origin/$base into it (\`git fetch origin $base && git merge origin/$base\`; never rebase or force-push), resolve the conflicts, run the check and commit. The local review then runs again for the new HEAD."
+  fi
   draft="$state/pr-body.md"
   if [ -f "$draft" ]; then
     for s in Verification Decisions; do

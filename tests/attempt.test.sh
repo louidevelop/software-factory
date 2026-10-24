@@ -122,6 +122,26 @@ list "$(li 4 agent-task in-progress)"
 attempt >/dev/null
 [ $? -eq 3 ] && ok || no "nothing to do: another session's lock is left alone"
 
+# ---------- an open PR that conflicts with the base goes back for rework ----------
+# GitHub runs no pull_request workflow on a conflicting PR, so the gate never sends it back.
+issue 8 agent-task in-progress
+comments 8 "$(att 1 "$OLD" finished ticket/8-ticket-8)"
+reply GET "repos/o/r/pulls?state=open&head=o:ticket/8-ticket-8" '[{"number": 30}]'
+list "$(li 8 agent-task in-progress)"
+for m in true null; do
+  reply GET repos/o/r/pulls/30 "{\"number\": 30, \"mergeable\": $m}"
+  fresh_calls
+  attempt >/dev/null
+  [ $? -eq 3 ] && ok || no "a PR with mergeable=$m waits for the gate or the owner"
+  called POST "$I/8/labels" && no "a PR with mergeable=$m is not sent back" || ok
+done
+reply GET repos/o/r/pulls/30 '{"number": 30, "mergeable": false}'
+fresh_calls
+attempt >/dev/null
+[ $? -eq 0 ] && [ "$(state "$P/.factory/worktrees/ticket-8" ticket)" = 8 ] && ok || no "a conflicting PR's ticket is resumed ($(cat "$W/err"))"
+called POST "$I/8/labels" "labels[]=rework" && ok || no "a conflicting PR's ticket is labelled rework"
+called POST "$I/8/comments" 'PR #30 conflicts with `main`' && ok || no "the rework comment names the PR and the base"
+
 # ---------- busy: one live attempt anywhere refuses another ----------
 comments 2 "$(att 1 "$NOW" "" ticket/2-ticket-2)"
 list "$(li 1 agent-task)" "$(li 2 agent-task in-progress)"
@@ -206,8 +226,23 @@ called POST "repos/o/r/pulls" && no "an unfinished attempt never opens a PR" || 
 CLAUDE_CODE_REMOTE=true attempt 2 >/dev/null
 S="$C/.git/factory"
 printf '## What\nx\n\n## Verification\n- test proves it\n\n## Decisions\n- None\n\n## Local review\n' >"$S/pr-body.md"
-jq -n --arg h "$(git rev-parse HEAD)" '{head: $h, model: "opus", fixed: [], unresolved: [], nonblocking: [], rejected: []}' >"$S/review.json"
+review_head() { jq -n --arg h "$(git rev-parse HEAD)" '{head: $h, model: "opus", fixed: [], unresolved: [], nonblocking: [], rejected: []}' >"$S/review.json"; }
 reply POST repos/o/r/pulls '{"html_url": "https://github.com/o/r/pull/12"}'
+# A branch that conflicts with the current base opens no PR, and the next attempt is told why.
+(cd "$O" && git fetch -q origin main && git checkout -q -B main origin/main && echo base >clash.txt &&
+  G add clash.txt && G commit -qm base && G push -q origin main)
+echo ticket >clash.txt && G add clash.txt && G commit -qm ticket
+review_head
+fresh_calls
+"$FACTORY" finish 2 >/dev/null 2>"$W/err"
+[ $? -eq 7 ] && grep -q "conflicts with the current main in: clash.txt" "$W/err" && ok || no "finish: a branch that conflicts with the base is not done ($(cat "$W/err"))"
+called POST repos/o/r/pulls && no "a conflicting branch opens no PR" || ok
+OUT=$(CLAUDE_CODE_REMOTE=true attempt 2)
+[[ $OUT == *"conflicts with the current main in: clash.txt"* ]] && ok || no "the next attempt's prompt names the conflict"
+[[ $OUT == *"git merge origin/main"* ]] && ok || no "the prompt says to merge the base before the review"
+git fetch -q origin main && G merge -q origin/main >/dev/null 2>&1
+echo both >clash.txt && G add clash.txt && G commit -q --no-edit
+review_head
 fresh_calls
 "$FACTORY" finish 2 2>"$W/err"
 [ $? -eq 0 ] && ok || no "finish opens the PR when done ($(cat "$W/err"))"

@@ -22,7 +22,9 @@ for an answer. `F` below means `.factory/bin/factory`.
    that asserts it, or a command and its output; Observed criteria: "Observed — for the human");
    **Decisions**: every decision the ticket did not settle; **Dependencies added** and **Migrations**
    with a one-line reason each, or "None". Leave **Local review** empty — the factory fills it.
-6. Local review — you trigger it, you never brief it. Commit everything, then:
+6. Local review — you trigger it, you never brief it. Commit everything and bring in the current
+   base: `git fetch origin {{BASE}} && git merge origin/{{BASE}}` (never rebase or force-push);
+   resolve any conflicts, run the check, and commit. Then:
    - `F review begin {{N}}`, then spawn the `factory-reviewer` subagent with exactly the
      message it prints (`Review ticket #{{N}}`). Add nothing: a hook blocks any other wording.
    - `F review judges {{N}}` — spawn one `factory-judge` subagent per printed line, all in

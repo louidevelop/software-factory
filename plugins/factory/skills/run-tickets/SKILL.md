@@ -20,7 +20,8 @@ $FACTORY run [<issue> | next] [--parent <feature parent issue>]
 
 It works on **one ticket** and then stops; the user starts the next run. Without an issue,
 `factory attempt` picks the work: a ticket labelled `rework` first, then one of the factory's
-in-progress tickets whose last attempt ended unfinished or stalled, then the next ready ticket.
+in-progress tickets whose last attempt ended unfinished or stalled, or whose open PR conflicts with
+the base (it labels that one `rework`), then the next ready ticket.
 Each attempt is one fresh headless session, counted in a ticket comment: it implements, runs the
 local review through the reviewer/judge/resolver subagents, fixes confirmed findings, and ends
 with `factory finish`, which opens the PR when everything is done, or pushes the work in progress
