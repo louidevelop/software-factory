@@ -96,17 +96,20 @@ expect "other subagents are not guarded" review-guard.sh 0 "" "$(spawn Explore '
 as_agent() { jq -cn --arg a "$1" --arg c "$2" '{tool_name: "Bash", agent_type: $a, tool_input: {command: $c}}'; }
 for cmd in 'gh issue view 12' 'git diff origin/main...HEAD' 'git log --oneline origin/main..HEAD' \
   'cat "$(git rev-parse --git-dir)/factory/pr-body.md"' 'ls src 2>/dev/null' 'grep -rn foo src | head -5' \
-  '.factory/bin/factory review show-finding 2' "$(jq -r .check "$PROJECT/.factory/config.json")"; do
+  '.factory/bin/factory review show-finding 12 2' '.factory/bin/factory review context 12' \
+  'git -C /repo/.factory/worktrees/ticket-12 diff origin/main...HEAD' "$(jq -r .check "$PROJECT/.factory/config.json")"; do
   expect "reviewer may: $cmd" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$cmd")"
 done
 for cmd in 'rm src/a.py' 'echo hi > notes.txt' 'git diff > out.patch' 'sed -i s/a/b/ src/a.py' 'find . -name x -delete' \
   'git commit -am x' 'git checkout -- .' 'ls; touch x' 'cat a | tee b' 'python3 -c "open(\"x\",\"w\")"'; do
   expect "reviewer may not: $cmd" review-guard.sh 2 "BLOCKED" "$(as_agent factory:factory-reviewer "$cmd")"
 done
-SAVE=$'.factory/bin/factory review save-findings <<\'JSON\'\n{"findings": []}\nJSON'
+SAVE=$'.factory/bin/factory review save-findings 12 <<\'JSON\'\n{"findings": []}\nJSON'
 expect "reviewer saves through the heredoc" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$SAVE")"
+expect "a save without the ticket number is refused" review-guard.sh 2 "BLOCKED" \
+  "$(as_agent factory:factory-reviewer $'.factory/bin/factory review save-findings <<\'JSON\'\n{"findings": []}\nJSON')"
 expect "nothing may follow the heredoc" review-guard.sh 2 "heredoc" "$(as_agent factory:factory-reviewer "$SAVE"$'\nrm -f x')"
-VERDICT=$'.factory/bin/factory review save-verdict 2 <<\'JSON\'\n{"verdict":"rejected","severity":"blocking","reason":"r"}\nJSON'
+VERDICT=$'.factory/bin/factory review save-verdict 12 2 <<\'JSON\'\n{"verdict":"rejected","severity":"blocking","reason":"r"}\nJSON'
 expect "judge saves its verdict" review-guard.sh 0 "" "$(as_agent factory:factory-judge "$VERDICT")"
 expect "review subagents cannot edit files" review-guard.sh 2 "read-only" \
   "$(jq -cn --arg p "$PROJECT/src/a.py" '{tool_name: "Edit", agent_type: "factory:factory-judge", tool_input: {file_path: $p}}')"

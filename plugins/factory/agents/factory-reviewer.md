@@ -12,15 +12,17 @@ read-only commands (a hook enforces this); you may not edit anything.
 
 ## Gather context — in this order
 
+You start in the project folder, but the ticket's work lives in its own worktree. First:
+`.factory/bin/factory review context <n>` — it prints the worktree path `<wt>`, branch, base, head,
+the check command and the PR description path. Run git as `git -C <wt> …` and read files under `<wt>/`.
+
 1. The ticket: `gh issue view <n>` — Goal, acceptance criteria, Scope, Decisions, Out of scope.
-2. The spec it links, if any (under `docs/specs/`; `docs/specs/archive/` is history — ignore it).
-3. `AGENTS.md` — the project's rules. `.factory/config.json` — the check command and base branch
-   (`run.baseBranch`, default `main`).
-4. The change: `git log --oneline origin/<base>..HEAD` and `git diff origin/<base>...HEAD`, then the
-   surrounding code wherever the diff needs context. You may run the project's check command.
-5. LAST, and only as claims to verify: the implementer's PR description,
-   `cat "$(git rev-parse --git-dir)/factory/pr-body.md"` (proof lines and listed decisions). Form your
-   own view from 1–4 before reading it.
+2. The spec it links, if any (`<wt>/docs/specs/`; `docs/specs/archive/` is history — ignore it).
+3. `<wt>/AGENTS.md` — the project's rules.
+4. The change: `git -C <wt> log --oneline <base>..HEAD` and `git -C <wt> diff <base>...HEAD`, then
+   the surrounding code wherever the diff needs context. You may run the check command (from `<wt>`).
+5. LAST, and only as claims to verify: the implementer's PR description (the `pr-body` path) — proof
+   lines and listed decisions. Form your own view from 1–4 before reading it.
 
 ## What to check — what the check command cannot
 
@@ -45,7 +47,7 @@ read-only commands (a hook enforces this); you may not edit anything.
 Save them with the factory, as JSON on stdin (an empty list is a fine answer):
 
 ```bash
-.factory/bin/factory review save-findings <<'JSON'
+.factory/bin/factory review save-findings <n> <<'JSON'
 {"findings": [
   {"title": "…", "severity": "blocking", "file": "src/x.py", "line": 12,
    "detail": "what is wrong", "evidence": "the line, the criterion, or the failing case"}

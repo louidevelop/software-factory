@@ -17,8 +17,9 @@ $FACTORY start <issue>        # or: $FACTORY start next [--parent <feature issue
 
 Exit 3: nothing is ready. Exit 4: the base branch is red — tell the user; nothing starts until it is
 fixed. Exit 5: the ticket blocked on unticked prerequisites — tell the user which. On success the
-last line is `WORKTREE=<path>`: `cd` there and work ONLY in that worktree for the rest of the ticket
-(the hooks follow your working directory).
+last line is `WORKTREE=<path>` (inside the project, under `.factory/worktrees/`): `cd` there and
+work ONLY in that worktree for the rest of the ticket (the hooks follow your working directory).
+Every `factory` command takes the ticket number and finds the worktree itself.
 
 ## 2. Implement
 
@@ -28,9 +29,9 @@ last line is `WORKTREE=<path>`: `cd` there and work ONLY in that worktree for th
 - A question the ticket, spec and code do not answer → `$FACTORY block <n> "<question>"` and stop.
   In an interactive session you may also ask the user, then record the answer in your PR's Decisions.
 - Implement within Scope; run the check after every change; commit as you go.
-- Write the PR description to `$(git rev-parse --git-dir)/factory/pr-body.md` from
-  `.github/pull_request_template.md` (Verification: one proof line per acceptance criterion;
-  Decisions; Dependencies added; Migrations). Leave Local review empty.
+- Fill in the PR description draft `start` created at `$(git rev-parse --git-dir)/factory/pr-body.md`
+  (Verification: one proof line per acceptance criterion; Decisions; Dependencies added;
+  Migrations). Leave Local review empty.
 
 ## 3. Local review — you trigger it, you never brief it
 
@@ -40,11 +41,11 @@ spec and the diff themselves. A hook blocks any spawn message other than the exa
 
 1. Commit everything, then `$FACTORY review begin <n>` and spawn `factory:factory-reviewer` with
    exactly the line it prints (`Review ticket #<n>`).
-2. `$FACTORY review judges` — spawn one `factory:factory-judge` per printed line, all in parallel,
+2. `$FACTORY review judges <n>` — spawn one `factory:factory-judge` per printed line, all in parallel,
    each with exactly that line.
-3. `$FACTORY review assemble`. It prints the confirmed blocking findings: fix exactly those (none of
-   the non-blocking ones), commit, then `$FACTORY review resolve-begin`, spawn one
-   `factory:factory-resolver` per printed line in parallel, and `$FACTORY review assemble --resolve`.
+3. `$FACTORY review assemble <n>`. It prints the confirmed blocking findings: fix exactly those (none of
+   the non-blocking ones), commit, then `$FACTORY review resolve-begin <n>`, spawn one
+   `factory:factory-resolver` per printed line in parallel, and `$FACTORY review assemble <n> --resolve`.
    What stays unresolved goes to the human in the PR; do not loop on it.
 
 ## 4. Open the PR

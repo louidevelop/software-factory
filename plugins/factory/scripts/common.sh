@@ -47,6 +47,15 @@ factory_require_config() {
 
 # Ticket helpers --------------------------------------------------------------
 
+# The checkout (main or a worktree) whose branch is ticket/<n>-…, so commands work from any
+# directory of the project — the review subagents start in the project folder, not the worktree.
+factory_ticket_worktree() {
+  git worktree list --porcelain | awk -v want="refs/heads/ticket/$1-" '
+    /^worktree / { path = substr($0, 10) }
+    /^branch / && index($2, want) == 1 { print path; exit }
+  '
+}
+
 ticket_json() {
   gh issue view "$1" --json number,title,body,state,labels,url
 }

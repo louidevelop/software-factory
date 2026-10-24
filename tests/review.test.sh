@@ -29,8 +29,8 @@ F review begin 5 >/dev/null && no "begin refuses a dirty tree" || ok
 rm y
 eq "begin prints the exact reviewer message" "$(F review begin 5 | tail -1)" "Review ticket #5"
 
-F review save-findings <<<'{"findings":[{"title":"x","severity":"urgent","detail":"d","evidence":"e"}]}' && no "bad severity rejected" || ok
-F review save-findings <<'JSON' || no "save-findings accepts valid JSON"
+F review save-findings 5 <<<'{"findings":[{"title":"x","severity":"urgent","detail":"d","evidence":"e"}]}' && no "bad severity rejected" || ok
+F review save-findings 5 <<'JSON' || no "save-findings accepts valid JSON"
 {"findings":[
   {"title":"real bug","severity":"blocking","detail":"d1","evidence":"e1","file":"x","line":1},
   {"title":"wrong claim","severity":"blocking","detail":"d2","evidence":"e2"},
@@ -39,13 +39,13 @@ F review save-findings <<'JSON' || no "save-findings accepts valid JSON"
   {"title":"judge never answered","severity":"blocking","detail":"d5","evidence":"e5"}
 ]}
 JSON
-eq "judges: one exact line per blocking finding" "$(F review judges | grep -c '^Judge finding [0-9] of ticket #5$')" 4
-eq "show-finding returns that finding only" "$(F review show-finding 2 | jq -r .title)" "wrong claim"
-F review save-verdict 4 <<<'{"verdict":"confirmed","severity":"blocking","reason":"r"}' && no "no verdicts for non-blocking findings" || ok
-F review save-verdict 1 <<<'{"verdict":"confirmed","severity":"blocking","reason":"line 1"}' || no "verdict 1"
-F review save-verdict 2 <<<'{"verdict":"rejected","severity":"blocking","reason":"the test asserts it"}' || no "verdict 2"
-F review save-verdict 3 <<<'{"verdict":"confirmed","severity":"non-blocking","reason":"cosmetic"}' || no "verdict 3"
-F review assemble >/dev/null || no "assemble"
+eq "judges: one exact line per blocking finding" "$(F review judges 5 | grep -c '^Judge finding [0-9] of ticket #5$')" 4
+eq "show-finding returns that finding only" "$(F review show-finding 5 2 | jq -r .title)" "wrong claim"
+F review save-verdict 5 4 <<<'{"verdict":"confirmed","severity":"blocking","reason":"r"}' && no "no verdicts for non-blocking findings" || ok
+F review save-verdict 5 1 <<<'{"verdict":"confirmed","severity":"blocking","reason":"line 1"}' || no "verdict 1"
+F review save-verdict 5 2 <<<'{"verdict":"rejected","severity":"blocking","reason":"the test asserts it"}' || no "verdict 2"
+F review save-verdict 5 3 <<<'{"verdict":"confirmed","severity":"non-blocking","reason":"cosmetic"}' || no "verdict 3"
+F review assemble 5 >/dev/null || no "assemble"
 eq "confirmed" "$(jq -c '[.confirmed[].title]' "$R")" '["real bug","judge never answered"]'
 eq "a missing verdict keeps the finding" "$(jq -r '.confirmed[1].verdict.reason' "$R")" "no judge recorded a verdict, so the finding stands for a human"
 eq "non-blocking = unjudged + downgraded" "$(jq -c '[.nonblocking[].title] | sort' "$R")" '["naming nit","style"]'
@@ -53,20 +53,30 @@ eq "rejected" "$(jq -c '[.rejected[].title]' "$R")" '["wrong claim"]'
 eq "unresolved until resolved" "$(jq '.unresolved | length' "$R")" 2
 eq "head recorded" "$(jq -r .head "$R")" "$(git rev-parse HEAD)"
 
-F review resolve-begin >/dev/null && no "resolve-begin needs new commits" || ok
+F review resolve-begin 5 >/dev/null && no "resolve-begin needs new commits" || ok
 echo y >>x && git commit -qam fix
-eq "resolver lines" "$(F review resolve-begin | grep -c '^Check confirmed finding [12] of ticket #5$')" 2
-eq "show-confirmed names the reviewed commit" "$(F review show-confirmed 1 | jq -r .reviewed_commit)" "$(jq -r .head "$R")"
-F review save-resolution 1 <<<'{"resolved":true,"reason":"fixed"}' || no "resolution 1"
-F review save-resolution 3 <<<'{"resolved":true,"reason":"x"}' && no "no resolution for a finding that does not exist" || ok
-F review assemble --resolve >/dev/null || no "assemble --resolve"
+eq "resolver lines" "$(F review resolve-begin 5 | grep -c '^Check confirmed finding [12] of ticket #5$')" 2
+eq "show-confirmed names the reviewed commit" "$(F review show-confirmed 5 1 | jq -r .reviewed_commit)" "$(jq -r .head "$R")"
+F review save-resolution 5 1 <<<'{"resolved":true,"reason":"fixed"}' || no "resolution 1"
+F review save-resolution 5 3 <<<'{"resolved":true,"reason":"x"}' && no "no resolution for a finding that does not exist" || ok
+F review assemble 5 --resolve >/dev/null || no "assemble --resolve"
 eq "fixed" "$(jq -c '[.fixed[].title]' "$R")" '["real bug"]'
 eq "no resolver answer = still unresolved" "$(jq -c '[.unresolved[].title]' "$R")" '["judge never answered"]'
 eq "head moves to the fixed commit" "$(jq -r .head "$R")" "$(git rev-parse HEAD)"
 
 F review begin 5 >/dev/null
 echo z >>x && git commit -qam moved
-F review save-findings <<<'{"findings":[]}' && no "save-findings refuses when HEAD moved" || ok
+F review save-findings 5 <<<'{"findings":[]}' && no "save-findings refuses when HEAD moved" || ok
+
+# Subagents start in the project folder, not the worktree: commands find the ticket's worktree.
+git worktree add -q -b ticket/7-y "$P-wt7" main
+(cd "$P-wt7" && echo w >w && git add w && git commit -qm w)
+eq "begin works from another checkout" "$(cd "$P" && F review begin 7 | tail -1)" "Review ticket #7"
+eq "context names the ticket's worktree" "$(F review context 7 | sed -n 's/^worktree: *//p')" "$(cd "$P-wt7" && pwd -P)"
+F review save-findings 7 <<<'{"findings":[]}' || no "save-findings for #7 from the main checkout"
+F review save-findings 9 <<<'{"findings":[]}' && no "unknown ticket refused" || ok
+F review save-findings x <<<'{"findings":[]}' && no "non-numeric ticket refused" || ok
+git worktree remove --force "$P-wt7"
 
 echo "review: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

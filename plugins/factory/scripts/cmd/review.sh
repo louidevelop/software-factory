@@ -7,9 +7,12 @@
 # other wording, keeps the subagents read-only, and stops the main agent from writing findings,
 # verdicts or resolutions itself. The subagents gather the ticket, spec and diff on their own.
 #
-# Main agent:   begin <n> → spawn reviewer → judges → spawn judges (parallel) → assemble
-#               → fix the confirmed findings, commit → resolve-begin → spawn resolvers → assemble --resolve
-# Subagents:    save-findings | show-finding <k> | save-verdict <k> | show-confirmed <k> | save-resolution <k>
+# Every command names the ticket and finds that ticket's worktree itself, so it works from any
+# directory of the project (subagents start in the project folder, not in the worktree).
+# Main agent:   begin <n> → spawn reviewer → judges <n> → spawn judges (parallel) → assemble <n>
+#               → fix the confirmed findings, commit → resolve-begin <n> → spawn resolvers → assemble <n> --resolve
+# Subagents:    context <n> | save-findings <n> | show-finding <n> <k> | save-verdict <n> <k>
+#               | show-confirmed <n> <k> | save-resolution <n> <k>
 # Result: <git dir>/factory/review.json, which open-pr turns into the PR's "Local review" section.
 set -u
 # shellcheck source=../common.sh
@@ -17,16 +20,26 @@ set -u
 factory_require git jq
 factory_require_config
 
+USAGE="usage: factory review begin|judges|assemble [--resolve]|resolve-begin <n>  (subagents: context <n> | save-findings <n> | show-finding <n> <k> | save-verdict <n> <k> | show-confirmed <n> <k> | save-resolution <n> <k>)"
+SUB=${1:-}
+N=${2:-}
+[[ $N =~ ^[0-9]+$ ]] || die "$USAGE"
+shift 2
+WT=$(factory_ticket_worktree "$N")
+[ -n "$WT" ] || die "no checkout of ticket #$N (no branch ticket/$N-…): factory start $N first"
+cd "$WT" || exit 1
 STATE=$(factory_state_dir)
 CUR="$STATE/review-current"
 RES="$STATE/review.json"
 HEAD=$(git rev-parse HEAD)
-SUB=${1:-}
-shift || true
+K_ARG() { [[ ${1:-} =~ ^[0-9]+$ ]] || die "$USAGE"; printf '%s' "$1"; }
 
 meta() { jq -r ".$1" "$CUR/meta.json"; }
-need_review() { [ -f "$CUR/meta.json" ] || die "no review in progress: run factory review begin <n>"; }
-same_head() { [ "$(meta head)" = "$HEAD" ] || die "HEAD moved since the review began; the review must see one commit. Run factory review begin again."; }
+need_review() {
+  [ -f "$CUR/meta.json" ] || die "no review in progress for #$N: factory review begin $N"
+  [ "$(meta ticket)" = "$N" ] || die "the review in progress is for #$(meta ticket), not #$N"
+}
+same_head() { [ "$(meta head)" = "$HEAD" ] || die "HEAD moved since the review began; the review must see one commit. Run factory review begin $N again."; }
 # read_json <jq validation filter> <what> — stdin must be JSON passing the filter. Call it as
 # X=$(read_json …) || exit 1: inside $(…), die only ends the subshell.
 read_json() {
@@ -38,8 +51,17 @@ read_json() {
 model() { local m; m=$(factory_cfg '.review.model'); printf '%s' "${m:-opus}"; }
 
 case "$SUB" in
+  context)
+    echo "worktree: $WT"
+    echo "branch:   $(git rev-parse --abbrev-ref HEAD)"
+    echo "base:     origin/$(factory_base_branch)"
+    echo "head:     $HEAD"
+    echo "check:    $(factory_cfg '.check')"
+    echo "pr-body:  $STATE/pr-body.md"
+    echo "Use git -C $WT … for history and diffs, and read files under $WT/."
+    ;;
+
   begin)
-    N=${1:?usage: factory review begin <issue>}
     [ -z "$(git status --porcelain)" ] || die "commit first: the review covers committed work only"
     rm -rf "$CUR"
     mkdir -p "$CUR"
@@ -61,10 +83,9 @@ case "$SUB" in
   judges)
     need_review
     [ -f "$CUR/findings.json" ] || die "the reviewer has not saved findings yet"
-    N=$(meta ticket)
     IDS=$(jq -r '.findings[] | select(.severity == "blocking") | .id' "$CUR/findings.json")
     if [ -z "$IDS" ]; then
-      echo "No blocking findings: nothing to judge. Run: factory review assemble"
+      echo "No blocking findings: nothing to judge. Run: factory review assemble $N"
     else
       echo "Spawn one factory:factory-judge subagent per line, in parallel, each with exactly that message:"
       for k in $IDS; do echo "Judge finding $k of ticket #$N"; done
@@ -73,13 +94,13 @@ case "$SUB" in
 
   show-finding)
     need_review
-    K=${1:?usage: factory review show-finding <k>}
+    K=$(K_ARG "${1:-}") || exit 1
     jq -e --argjson k "$K" '.findings[] | select(.id == $k) | del(.id)' "$CUR/findings.json" || die "no finding $K"
     ;;
 
   save-verdict)
     need_review
-    K=${1:?usage: factory review save-verdict <k>}
+    K=$(K_ARG "${1:-}") || exit 1
     jq -e --argjson k "$K" '.findings[] | select(.id == $k and .severity == "blocking")' "$CUR/findings.json" >/dev/null ||
       die "finding $K is not a blocking finding of this review"
     V=$(read_json '(.verdict == "confirmed" or .verdict == "rejected") and (.severity == "blocking" or .severity == "non-blocking") and (.reason | type == "string")' verdict) || exit 1
@@ -89,13 +110,13 @@ case "$SUB" in
 
   show-confirmed)
     [ -f "$RES" ] || die "no assembled review"
-    K=${1:?usage: factory review show-confirmed <k>}
+    K=$(K_ARG "${1:-}") || exit 1
     jq -e --argjson i "$((K - 1))" '{reviewed_commit: .head, finding: (.confirmed[$i] // error("no confirmed finding"))}' "$RES" || die "no confirmed finding $K"
     ;;
 
   save-resolution)
-    [ -f "$CUR/resolve.json" ] || die "no resolution check in progress: factory review resolve-begin"
-    K=${1:?usage: factory review save-resolution <k>}
+    [ -f "$CUR/resolve.json" ] || die "no resolution check in progress: factory review resolve-begin $N"
+    K=$(K_ARG "${1:-}") || exit 1
     [ "$K" -ge 1 ] && [ "$K" -le "$(jq '.confirmed | length' "$RES")" ] || die "no confirmed finding $K"
     V=$(read_json '(.resolved | type == "boolean") and (.reason | type == "string")' resolution) || exit 1
     printf '%s\n' "$V" >"$CUR/resolution-$K.json"
@@ -120,7 +141,7 @@ case "$SUB" in
           unresolved: [.[] | select(.resolution.resolved | not) | .detail += " (still open: \(.resolution.reason))"]
         }' >"$RES.tmp" && mv "$RES.tmp" "$RES"
       say "fixed: $(jq '.fixed | length' "$RES"), still unresolved: $(jq '.unresolved | length' "$RES")"
-      echo "Next: factory open-pr $(jq -r .ticket "$RES") (unresolved findings go to the human in the PR)"
+      echo "Next: factory open-pr $N (unresolved findings go to the human in the PR)"
       exit 0
     fi
     need_review
@@ -136,7 +157,7 @@ case "$SUB" in
         fi
         jq -cn --argjson f "$F" --argjson v "${V:-null}" '$f + {verdict: $v}'
       done
-    } | jq -s --arg head "$HEAD" --arg model "$(model)" --argjson n "$(meta ticket)" '
+    } | jq -s --arg head "$HEAD" --arg model "$(model)" --argjson n "$N" '
       def blocking: .severity == "blocking";
       {
         ticket: $n, head: $head, model: $model,
@@ -150,10 +171,10 @@ case "$SUB" in
     C=$(jq '.confirmed | length' "$RES")
     say "confirmed blocking: $C, non-blocking: $(jq '.nonblocking | length' "$RES"), rejected: $(jq '.rejected | length' "$RES")"
     if [ "$C" -gt 0 ]; then
-      echo "Fix exactly these confirmed findings — nothing else, no non-blocking ones — commit, then: factory review resolve-begin"
+      echo "Fix exactly these confirmed findings — nothing else, no non-blocking ones — commit, then: factory review resolve-begin $N"
       jq '.confirmed | map(del(.verdict))' "$RES"
     else
-      echo "Next: factory open-pr $(meta ticket)"
+      echo "Next: factory open-pr $N"
     fi
     ;;
 
@@ -165,10 +186,9 @@ case "$SUB" in
     mkdir -p "$CUR"
     rm -f "$CUR"/resolution-*.json
     jq -n --arg head "$HEAD" '{head: $head}' >"$CUR/resolve.json"
-    N=$(jq -r .ticket "$RES")
     echo "Spawn one factory:factory-resolver subagent per line, in parallel, each with exactly that message:"
     for k in $(seq 1 "$(jq '.confirmed | length' "$RES")"); do echo "Check confirmed finding $k of ticket #$N"; done
     ;;
 
-  *) die "usage: factory review begin <n> | judges | assemble [--resolve] | resolve-begin  (subagents: save-findings | show-finding <k> | save-verdict <k> | show-confirmed <k> | save-resolution <k>)" ;;
+  *) die "$USAGE" ;;
 esac

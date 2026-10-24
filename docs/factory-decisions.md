@@ -227,3 +227,8 @@ Each deviation is forced by a platform fact found while building; the decision's
   is a guardrail, not a sandbox), where a separate process could not be briefed at all.
 - **No PRs for factory changes** while the factory is young: commit straight to `main` unless the
   owner asks for a PR. Projects keep the full ticket → PR → gate flow.
+- **Ticket worktrees live inside the project** (`.factory/worktrees/ticket-N`, excluded via
+  `.git/info/exclude`), and every `factory review` / `open-pr` command takes the ticket number and
+  finds that worktree itself. Found by the first live run: subagents start in the project folder,
+  and the desktop app resets a session's working directory when it points outside the project, so a
+  worktree beside the project was unreachable from the reviewer and the stop gate checked `main`.

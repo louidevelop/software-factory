@@ -8,9 +8,12 @@ set -u
 factory_require git gh jq
 factory_require_config
 
+N=${1:-$(cat "$(factory_state_dir)/ticket" 2>/dev/null)}
+[[ $N =~ ^[0-9]+$ ]] || die "usage: factory open-pr <issue>"
+WT=$(factory_ticket_worktree "$N")
+[ -n "$WT" ] || die "no checkout of ticket #$N: factory start $N first"
+cd "$WT" || exit 1
 STATE=$(factory_state_dir)
-N=${1:-$(cat "$STATE/ticket" 2>/dev/null)}
-[ -n "$N" ] || die "usage: factory open-pr <issue> (run from the ticket's worktree)"
 BASE=$(factory_base_branch)
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 case "$BRANCH" in ticket/"$N"-*) ;; *) die "branch $BRANCH is not ticket #$N's branch" ;; esac
@@ -29,9 +32,9 @@ for s in Verification Decisions; do
 done
 
 REVIEW="$STATE/review.json"
-[ -f "$REVIEW" ] || die "no local review yet: factory review begin $N (then the reviewer and judges, then assemble)"
+[ -f "$REVIEW" ] || die "no local review yet: factory review begin $N (then the reviewer and judges, then assemble $N)"
 [ "$(jq -r .head "$REVIEW")" = "$(git rev-parse HEAD)" ] ||
-  die "the local review is for an older commit: after fixing confirmed findings run factory review resolve-begin and assemble --resolve; otherwise review again"
+  die "the local review is for an older commit: after fixing confirmed findings run factory review resolve-begin $N and assemble $N --resolve; otherwise review again"
 
 # The draft's own "## Local review" (template placeholder) is replaced by the real one.
 BODY=$(awk '/^## Local review/ { exit } { print }' "$DRAFT")

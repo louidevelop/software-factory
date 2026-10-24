@@ -90,7 +90,15 @@ fi
 # 7. Worktree on a fresh branch from the base.
 git fetch -q origin "$BASE" || die "could not fetch $BASE"
 BRANCH="ticket/$N-$(ticket_slug "$TITLE")"
-WT="$(dirname "$MAIN")/.factory-worktrees/$(basename "$MAIN")/ticket-$N"
+# Inside the project, so the session's working directory, file tools and the review subagents
+# (which start in the project folder) all reach it. Kept out of git via the local exclude file,
+# which the project's tools honour like .gitignore.
+WT="$MAIN/.factory/worktrees/ticket-$N"
+EXCLUDE="$(git rev-parse --git-common-dir)/info/exclude"
+if ! git check-ignore -q "$MAIN/.factory/worktrees/x" 2>/dev/null; then
+  mkdir -p "$(dirname "$EXCLUDE")"
+  printf '\n# software factory: ticket worktrees\n/.factory/worktrees/\n' >>"$EXCLUDE"
+fi
 if [ -d "$WT" ]; then
   say "reusing worktree $WT"
 else
@@ -128,9 +136,14 @@ fi
 # 9. Run state for the later steps (never committed: it lives in the git dir).
 STATE=$(cd "$WT" && factory_state_dir)
 printf '%s\n' "$N" >"$STATE/ticket"
+# A PR description draft to fill in, from the factory's template (the project may not have its
+# own copy yet, e.g. while a factory sync PR is open).
+if [ ! -f "$STATE/pr-body.md" ]; then
+  sed "s/^Closes #<!-- ticket number -->/Closes #$N/" "$FACTORY_PLUGIN/templates/github/pull_request_template.md" >"$STATE/pr-body.md"
+fi
 SPEC=$(grep -oE 'docs/specs/[A-Za-z0-9._/-]+\.md' <<<"$BODY" | head -1)
 say "ready: $(jq -r .url <<<"$T")"
 [ -n "$SPEC" ] && say "spec: $SPEC"
 say "branch $BRANCH in $WT"
-say "next: implement in the worktree, write $STATE/pr-body.md from .github/pull_request_template.md, then: factory review $N"
+say "next: cd $WT, implement, fill in $STATE/pr-body.md, commit, then: factory review begin $N"
 echo "WORKTREE=$WT"

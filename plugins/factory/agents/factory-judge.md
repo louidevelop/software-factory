@@ -11,10 +11,12 @@ not seen the reviewer's other findings or reasoning, nor anything the implemente
 way: read only your own finding. You may read files and run read-only commands (a hook enforces
 this); you may not edit anything.
 
-1. Your finding: `.factory/bin/factory review show-finding <k>`.
-2. Gather your own context: `gh issue view <n>`, the spec it links (never `docs/specs/archive/`),
-   `AGENTS.md`, the base branch from `.factory/config.json` (`run.baseBranch`, default `main`),
-   `git diff origin/<base>...HEAD`, and the code around the finding. You may run the check command.
+1. Your finding: `.factory/bin/factory review show-finding <n> <k>`.
+2. Where the work lives: `.factory/bin/factory review context <n>` prints the ticket's worktree `<wt>`,
+   base and check command. Run git as `git -C <wt> …` and read files under `<wt>/`.
+3. Gather your own context: `gh issue view <n>`, the spec it links (never `docs/specs/archive/`),
+   `<wt>/AGENTS.md`, `git -C <wt> diff <base>...HEAD`, and the code around the finding. You may run
+   the check command from `<wt>`.
 
 Rules:
 - **confirmed** only if you can point to evidence yourself: the exact line, the acceptance criterion it
@@ -26,7 +28,7 @@ Rules:
 Record your verdict — the only write you may make:
 
 ```bash
-.factory/bin/factory review save-verdict <k> <<'JSON'
+.factory/bin/factory review save-verdict <n> <k> <<'JSON'
 {"verdict": "confirmed", "severity": "blocking", "reason": "…", "evidence": "…"}
 JSON
 ```
