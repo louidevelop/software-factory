@@ -72,6 +72,50 @@ for cmd in \
   'gh issue edit 3 --add-label blocked --remove-label in-progress'; do
   expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
 done
+
+# ---------- block-dangerous: the cloud proxy's ccr routes ----------
+for cmd in \
+  'gh api -X PUT repos/o/r/pulls/3/ccr/auto_merge' 'gh api --method PUT "repos/{owner}/{repo}/pulls/$PR/ccr/auto_merge"' \
+  'curl -s -X PUT -H "Authorization: token x" "https://api.github.com/repos/o/r/pulls/3/ccr/auto_merge"' \
+  'gh api -X POST repos/o/r/pulls/3/ccr/comments/99/resolve' "curl -X POST 'https://api.github.com/repos/o/r/pulls/3/ccr/comments/99/unresolve'"; do
+  expect "blocks: $cmd" block-dangerous.sh 2 "auto-merging" "$(bash_input "$cmd")"
+done
+for cmd in \
+  'gh api repos/o/r/pulls/3/ccr/review_threads' 'curl -s https://api.github.com/repos/o/r/pulls/3/ccr/review_threads' \
+  'gh api -X POST repos/o/r/pulls/3/ccr/ready_for_review' 'grep -rn ccr/auto_merge docs'; do
+  expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
+done
+
+# ---------- block-dangerous: the factory runtime is read-only ----------
+RT="$PROJECT/.git/factory-runtime"
+for tool in Edit Write MultiEdit; do
+  expect "blocks $tool in factory-runtime" block-dangerous.sh 2 "factory-runtime" "$(file_input "$tool" "$RT/plugins/factory/hooks/lib.sh")"
+done
+expect "blocks NotebookEdit in factory-runtime" block-dangerous.sh 2 "factory-runtime" \
+  "$(jq -cn --arg p "$RT/x.ipynb" '{tool_name: "NotebookEdit", tool_input: {notebook_path: $p, new_source: "x"}}')"
+for cmd in \
+  'echo exit 0 > .git/factory-runtime/plugins/factory/hooks/lib.sh' 'echo x >> "$(git rev-parse --git-common-dir)/factory-runtime/hooks/lib.sh"' \
+  'printf x | tee .git/factory-runtime/a' 'sed -i "" s/2/0/ .git/factory-runtime/hooks/block-dangerous.sh' \
+  'rm .git/factory-runtime/hooks/review-guard.sh' 'mv .git/factory-runtime /tmp/old' 'cp /tmp/lib.sh .git/factory-runtime/hooks/' \
+  'git -C .git/factory-runtime checkout HEAD~3' 'git clone https://example.com/x.git .git/factory-runtime' \
+  'cd .git/factory-runtime && git pull' 'cd .git/factory-runtime; echo x > hooks/lib.sh' \
+  'find .git/factory-runtime -name "*.sh" -delete' 'find .git/factory-runtime -name "*.sh" | xargs chmod -x' \
+  'python3 -c "open(\".git/factory-runtime/a\",\"w\")"' 'chmod -x .git/factory-runtime/hooks/stop-gate.sh'; do
+  expect "blocks: $cmd" block-dangerous.sh 2 "factory-runtime" "$(bash_input "$cmd")"
+done
+for cmd in \
+  'cat .git/factory-runtime/plugins/factory/hooks/lib.sh' 'ls -la "$(git rev-parse --git-common-dir)/factory-runtime"' \
+  'git -C .git/factory-runtime log -1 --format=%H' 'grep -rn block .git/factory-runtime/plugins > /tmp/hits.txt' \
+  'cp .git/factory-runtime/examples/config.json /tmp/' 'diff .git/factory-runtime/a src/a 2>&1' \
+  'bash .git/factory-runtime/plugins/factory/scripts/factory.sh status' 'rm src/factory-runtime-notes.txt'; do
+  expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
+done
+for tool in Read Grep; do
+  expect "allows $tool in factory-runtime" block-dangerous.sh 0 "" \
+    "$(jq -cn --arg t "$tool" --arg p "$RT/hooks/lib.sh" '{tool_name: $t, tool_input: {file_path: $p, path: $p, pattern: "x"}}')"
+done
+expect "allows Edit of a file merely named like it" block-dangerous.sh 0 "" "$(file_input Edit "$PROJECT/src/factory-runtime.md")"
+
 expect "allows Read .env.example" block-dangerous.sh 0 "" "$(file_input Read "$PROJECT/.env.example")"
 expect "allows Read src file" block-dangerous.sh 0 "" "$(file_input Read "$PROJECT/src/a.py")"
 
