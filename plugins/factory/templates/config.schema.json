@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Software factory project config (.factory/config.json)",
+  "description": "Declares how a project fills the factory contract. Globs: `*` and `**` match any characters including `/`, `**/` also matches zero directories, `?` matches one character. The classifier always reads this file from the base branch, never from a PR.",
+  "type": "object",
+  "required": ["version", "owners", "check"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "owners": {
+      "description": "GitHub logins whose approval satisfies the gate for high-impact PRs. The machine user must never be listed.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "check": {
+      "description": "The one command that must pass locally and in CI, byte for byte. Run from the project root.",
+      "type": "string",
+      "minLength": 1
+    },
+    "fix": {
+      "description": "Run after every edit on files matching `glob`. `{file}` is replaced with the quoted path relative to the root. Must stay fast (seconds); exit non-zero when problems remain.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["glob", "command"],
+        "additionalProperties": false,
+        "properties": {
+          "glob": { "type": "string", "minLength": 1 },
+          "command": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "setup": {
+      "description": "Prepares a fresh worktree so the project runs in it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "string" },
+        "copy": {
+          "description": "Gitignored files copied from the main checkout into a new worktree (e.g. .env). Copied by the factory script, never read by an agent.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "block": {
+      "description": "Project-specific commands the agent may never run (extended regex on the whitespace-normalised Bash command).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pattern"],
+        "additionalProperties": false,
+        "properties": {
+          "pattern": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "migrations": { "$ref": "#/$defs/globs", "description": "Touching these makes a PR high impact." },
+        "sensitive": { "$ref": "#/$defs/globs", "description": "Auth, payments, data deletion, signature checks, prompts… Touching these makes a PR high impact." },
+        "guardrails": { "$ref": "#/$defs/globs", "description": "Project guardrail files beyond the built-in list (linter configs, check scripts, Makefile). High impact." },
+        "dependencies": { "$ref": "#/$defs/globs", "description": "Dependency manifests beyond the built-in list. High impact." },
+        "generated": { "$ref": "#/$defs/globs", "description": "Excluded from the size count." },
+        "tests": { "$ref": "#/$defs/globs", "description": "Test files beyond the built-in patterns, for the deleted-tests rule." }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lines": { "type": "integer", "minimum": 1, "default": 400 },
+        "files": { "type": "integer", "minimum": 1, "default": 20 }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "description": "Model for the reviewer and judges. Default: opus." },
+        "maxTurns": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "description": "Model for unattended implementation runs. Default: your default model." },
+        "maxAttempts": { "type": "integer", "minimum": 1, "default": 3 },
+        "maxTurns": { "type": "integer", "minimum": 1, "default": 80 },
+        "baseBranch": { "type": "string", "default": "main" }
+      }
+    }
+  },
+  "$defs": {
+    "globs": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  }
+}
