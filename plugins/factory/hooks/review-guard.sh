@@ -52,8 +52,8 @@ if in_review_agent; then
   CMD=$(jq -r '.tool_input.command // empty' <<<"$INPUT")
   FIRST=$(head -n1 <<<"$CMD")
   # The one write: a heredoc into the factory's own save command.
-  if [[ $FIRST =~ ^\.factory/bin/factory\ review\ (save-findings\ [0-9]+|save-verdict\ [0-9]+\ [0-9]+|save-resolution\ [0-9]+\ [0-9]+)\ \<\<-?\'?([A-Za-z_]+)\'?[[:space:]]*$ ]]; then
-    TERM=${BASH_REMATCH[2]}
+  if [[ $FIRST =~ ^([^[:space:]]*/)?\.factory/bin/factory\ review\ (save-findings\ [0-9]+|save-verdict\ [0-9]+\ [0-9]+|save-resolution\ [0-9]+\ [0-9]+)\ \<\<-?\'?([A-Za-z_]+)\'?[[:space:]]*$ ]]; then
+    TERM=${BASH_REMATCH[3]} # [1] optional path, [2] the save command, [3] the heredoc word
     [ "$(tail -n1 <<<"$CMD" | tr -d '[:space:]')" = "$TERM" ] && exit 0
     block "the save command must be a single heredoc ending with $TERM, nothing after it."
   fi
@@ -63,7 +63,7 @@ if in_review_agent; then
   # Writes through redirection are out; harmless redirects are stripped first.
   STRIPPED=$(sed -E 's#[0-9]?>&[0-9]##g; s#[0-9]?>[[:space:]]*/dev/null##g' <<<"$CMD")
   [[ $STRIPPED == *">"* ]] && block "output redirection writes files; $AGENT is read-only."
-  ALLOWED='^(git( -C [^ ]+)? (diff|log|show|status|rev-parse|merge-base|blame|ls-files|branch --show-current|worktree list)|gh (issue view|pr view|pr diff)|ls|cat|head|tail|wc|grep|rg|find|jq|sort|uniq|diff|tree|file|stat|basename|dirname|pwd|echo|cd|true|sed -n|awk|\.factory/bin/factory review (context|show-finding|show-confirmed))( |$)'
+  ALLOWED='^(git( -C [^ ]+)? (diff|log|show|status|rev-parse|merge-base|blame|ls-files|branch --show-current|worktree list)|gh (issue view|pr view|pr diff)|ls|cat|head|tail|wc|grep|rg|find|jq|sort|uniq|diff|tree|file|stat|basename|dirname|pwd|echo|cd|true|sed -n|awk|([^ ]*/)?\.factory/bin/factory review (context|show-finding|show-confirmed))( |$)'
   while IFS= read -r seg; do
     seg=$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$seg")
     [ -n "$seg" ] || continue
@@ -82,6 +82,8 @@ case "$TOOL" in
     ;;
   Bash)
     CMD=$(jq -r '.tool_input.command // empty' <<<"$INPUT")
+    # Harmless redirects (2>/dev/null, 2>&1) are not writes to the record.
+    CMD=$(sed -E 's#[0-9]?>&[0-9]##g; s#[0-9]?>[[:space:]]*/dev/null##g' <<<"$CMD")
     [[ $CMD =~ factory\ review\ (save-findings|save-verdict|save-resolution) ]] &&
       block "only the review subagents record findings, verdicts and resolutions."
     if [[ $CMD =~ factory/(review\.json|review-current) ]] && [[ $CMD =~ (\>|tee |cp |mv |rm |sed -i|python|node |perl|ruby) ]]; then

@@ -108,6 +108,10 @@ SAVE=$'.factory/bin/factory review save-findings 12 <<\'JSON\'\n{"findings": []}
 expect "reviewer saves through the heredoc" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$SAVE")"
 expect "a save without the ticket number is refused" review-guard.sh 2 "BLOCKED" \
   "$(as_agent factory:factory-reviewer $'.factory/bin/factory review save-findings <<\'JSON\'\n{"findings": []}\nJSON')"
+expect "reviewer may save via the full path to the shim" review-guard.sh 0 "" \
+  "$(as_agent factory:factory-reviewer "$PROJECT/$SAVE")"
+expect "a cd prefix is still refused" review-guard.sh 2 "BLOCKED" \
+  "$(as_agent factory:factory-reviewer "cd $PROJECT && $SAVE")"
 expect "nothing may follow the heredoc" review-guard.sh 2 "heredoc" "$(as_agent factory:factory-reviewer "$SAVE"$'\nrm -f x')"
 VERDICT=$'.factory/bin/factory review save-verdict 12 2 <<\'JSON\'\n{"verdict":"rejected","severity":"blocking","reason":"r"}\nJSON'
 expect "judge saves its verdict" review-guard.sh 0 "" "$(as_agent factory:factory-judge "$VERDICT")"
@@ -119,6 +123,8 @@ expect "main agent cannot save findings" review-guard.sh 2 "only the review suba
 expect "main agent cannot save verdicts" review-guard.sh 2 "only the review subagents" "$(bash_input "$VERDICT")"
 expect "main agent may begin a review" review-guard.sh 0 "" "$(bash_input '.factory/bin/factory review begin 12')"
 expect "main agent may read the record" review-guard.sh 0 "" "$(bash_input 'jq .confirmed .git/factory/review.json')"
+expect "main agent may read the record with stderr silenced" review-guard.sh 0 "" \
+  "$(bash_input 'cat "$(git rev-parse --git-dir)/factory/review.json" 2>/dev/null || find .git -name "review*.json"')"
 expect "main agent cannot overwrite the record" review-guard.sh 2 "review record" \
   "$(bash_input 'echo {} > .git/factory/review.json')"
 expect "main agent cannot Write the record" review-guard.sh 2 "review record" \
