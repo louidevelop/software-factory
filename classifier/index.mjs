@@ -1,17 +1,21 @@
 // The factory gate, run as a GitHub Action on every pull_request event (and when the `merge`
 // label is added): classify → label + one sticky comment → wait for the other checks → decide →
-// ask the owner (high impact) or check the PR on the current base → merge.
+// ask the owner (high impact) or check the PR on the current base → merge → start the routine.
 // Fails CLOSED: any error rates the PR high and fails the gate.
+// On an issue labelled `blocked` it only mentions the owners (mentionBlocked).
 import { readFileSync } from "node:fs";
 import { validateConfig } from "./config.mjs";
 import { gate, MERGE_LABEL } from "./gate.mjs";
 import { client } from "./github.mjs";
 import { mergeCheck } from "./mergecheck.mjs";
+import { BLOCK_MARKER, BLOCKED_LABEL, fireRoutine, mentionBody, needsBlockMention, needsRework, REWORK_LABEL } from "./notify.mjs";
 import { classify, linkedIssue } from "./rules.mjs";
 
 const MARKER = "<!-- factory:gate -->";
 const ASK_MARKER = "<!-- factory:ask-owner -->";
 const SELF = process.env.FACTORY_GATE_CHECK_NAME || "gate";
+// The gate workflow's other job, skipped on every PR: not one of the project's checks.
+const SIBLING = "blocked-ticket";
 const WAIT_MS = Number(process.env.FACTORY_GATE_WAIT_MS || 25 * 60 * 1000);
 const MERGE_CHECK_MS = Number(process.env.FACTORY_GATE_MERGE_CHECK_MS || 25 * 60 * 1000);
 const POLL_MS = 15_000;
@@ -25,6 +29,7 @@ const R = `/repos/${repo}`;
 
 const log = (...a) => console.log("[factory gate]", ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fire = (text) => fireRoutine({ url: process.env["INPUT_ROUTINE-URL"], token: process.env["INPUT_ROUTINE-TOKEN"], text, log });
 
 async function readBaseConfig(baseRef) {
   const file = await gh.get(`${R}/contents/.factory/config.json?ref=${encodeURIComponent(baseRef)}`);
@@ -64,25 +69,56 @@ function render(result, decision) {
 async function mentionOwners(owners, text) {
   if (!owners.length) return;
   await gh.post(`${R}/issues/${number}/assignees`, { assignees: owners }).catch((err) => log(`could not assign: ${err.message}`));
-  await gh.post(`${R}/issues/${number}/comments`, { body: `${ASK_MARKER}\n${owners.map((o) => `@${o}`).join(" ")} ${text}` });
+  await gh.post(`${R}/issues/${number}/comments`, { body: mentionBody(ASK_MARKER, owners, text) });
 }
 
-// Ask once per PR; later pushes that drop the label ask again on their own.
+// Ask once per PR; later pushes that drop the label ask again on their own. The PR now waits for
+// the owner, so the routine is started too: its run's notification reaches the owner's phone, and
+// the run can take on other work meanwhile.
 async function askOwners(owners, base) {
   const comments = await gh.paginate(`${R}/issues/${number}/comments`);
   if (comments.some((c) => c.body?.startsWith(ASK_MARKER))) return;
   await mentionOwners(owners, `this PR is high impact and its checks are green. Review it, then add the \`${MERGE_LABEL}\` label: the gate checks it against the current \`${base}\` and merges it. The gate comment says why it is high impact.`);
+  await fire(`PR #${number} is high impact and waits for an owner's \`${MERGE_LABEL}\` label`);
 }
 
-// The PR cannot merge as it stands (conflict, or red on the current base): mark its ticket
-// blocked so the human sees it in the ticket list, not only on the PR. Once per ticket.
-async function blockTicket(pr, why) {
+// The PR cannot merge as it stands (conflict, or red on the current base): label its ticket
+// `rework` so the next attempt picks it up (see needsRework).
+async function reworkTicket(pr, why) {
   const n = linkedIssue(pr.body ?? "");
   if (!n) return;
   const issue = await gh.get(`${R}/issues/${n}`);
-  if (issue.labels?.some((l) => l.name === "blocked")) return;
-  await gh.post(`${R}/issues/${n}/labels`, { labels: ["blocked"] });
-  await gh.post(`${R}/issues/${n}/comments`, { body: `Blocked by the factory gate: PR #${number} ${why}` });
+  if (!needsRework(issue)) return;
+  await gh.post(`${R}/issues/${n}/labels`, { labels: [REWORK_LABEL] });
+  await gh.post(`${R}/issues/${n}/comments`, { body: `Sent back for rework by the factory gate: PR #${number} ${why}` });
+}
+
+// The owners named in the config on the base branch. An issue has no base of its own, so this
+// reads the default branch, then the configured run.baseBranch if that differs.
+async function ownersForIssues() {
+  const fallback = event.repository?.default_branch ?? "main";
+  let config = await readBaseConfig(fallback);
+  const base = config.run?.baseBranch;
+  if (base && base !== fallback) config = await readBaseConfig(base);
+  return config.owners;
+}
+
+// An issue was labelled `blocked`: post a new comment mentioning the owners (see needsBlockMention).
+async function mentionBlocked() {
+  const n = event.issue.number;
+  const issue = await gh.get(`${R}/issues/${n}`);
+  const events = (await gh.paginate(`${R}/issues/${n}/events`)).map((e) => ({ event: e.event, label: e.label?.name, created_at: e.created_at }));
+  const comments = await gh.paginate(`${R}/issues/${n}/comments`);
+  if (!needsBlockMention({ issue, events, comments })) return log(`#${n}: no new block to mention`);
+  // Without a readable config the repo's owner is the one to tell.
+  const owners = await ownersForIssues().catch((err) => {
+    log(`could not read the owners: ${err.message}`);
+    return [repo.split("/")[0]];
+  });
+  await gh.post(`${R}/issues/${n}/comments`, {
+    body: mentionBody(BLOCK_MARKER, owners, `this ticket is \`${BLOCKED_LABEL}\` on a question for you: the **Blocked** comment says what. Answer it in a comment, then remove the \`${BLOCKED_LABEL}\` label so an agent picks the ticket up again.`),
+  });
+  log(`#${n}: mentioned ${owners.join(", ")}`);
 }
 
 async function otherChecks(sha) {
@@ -90,7 +126,7 @@ async function otherChecks(sha) {
   const statuses = (await gh.get(`${R}/commits/${sha}/status`)).statuses ?? [];
   const latest = new Map();
   for (const r of runs) {
-    if (r.name === SELF) continue;
+    if (r.name === SELF || r.name === SIBLING) continue;
     const seen = latest.get(r.name);
     if (!seen || (r.started_at ?? "") > (seen.started_at ?? "")) latest.set(r.name, r);
   }
@@ -123,6 +159,10 @@ async function waitForChecks(sha) {
 }
 
 async function main() {
+  if (process.env.GITHUB_EVENT_NAME === "issues") {
+    if (event.action === "labeled" && event.label?.name === BLOCKED_LABEL && !event.issue?.pull_request) return mentionBlocked();
+    return log(`nothing to do for issues.${event.action}`);
+  }
   if (!number) throw new Error("not a pull_request event");
   let pr = await gh.get(`${R}/pulls/${number}`);
   if (pr.state !== "open") return log("PR is not open; nothing to do");
@@ -172,15 +212,17 @@ async function main() {
   if (!mc.ok) {
     log(mc.summary);
     await upsertComment(render(result, `not merged — ${mc.summary}`));
-    if (mc.why !== "timeout") await blockTicket(pr, mc.summary).catch((err) => log(`could not block the ticket: ${err.message}`));
+    if (mc.why !== "timeout") await reworkTicket(pr, mc.summary).catch((err) => log(`could not send the ticket back for rework: ${err.message}`));
     process.exitCode = 1;
     return;
   }
 
   const merged = await gh.put(`${R}/pulls/${number}/merge`, { merge_method: "squash", sha: pr.head.sha });
   log(`merged #${number}`);
+  // The ticket is done: drop the gate's rework label (and `blocked`, which the gate used to set).
   const issue = linkedIssue(pr.body ?? "");
-  if (issue) await gh.del(`${R}/issues/${issue}/labels/blocked`).catch(() => {});
+  for (const label of issue ? [REWORK_LABEL, BLOCKED_LABEL] : []) await gh.del(`${R}/issues/${issue}/labels/${label}`).catch(() => {});
+  await fire(`PR #${number} merged${issue ? ` (ticket #${issue})` : ""}`);
   // The merge API cannot pin the base, so a merge that slipped in after the last read of it
   // means this squash landed on a base the check did not see. Say so; pickup checks the base.
   const parent = merged?.sha ? (await gh.get(`${R}/commits/${merged.sha}`)).parents?.[0]?.sha : mc.baseSha;
@@ -193,6 +235,7 @@ async function main() {
 
 main().catch(async (err) => {
   console.error(`[factory gate] ${err.stack ?? err}`);
+  if (!number) return void (process.exitCode = 1);
   try {
     await upsertComment(`### Factory gate: 🔴 error\n\nThe gate failed, so nothing merges: \`${err.message}\``);
   } catch {}

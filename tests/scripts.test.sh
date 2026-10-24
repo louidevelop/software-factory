@@ -134,5 +134,13 @@ called POST "$I" 'labels[]=agent-task' && called POST "$I" $'body=## Goal\nShip 
 called POST "$I/10/sub_issues" 'sub_issue_id=3000' && ok || no "tickets create links the sub-issue by id"
 called POST "$I/30/dependencies/blocked_by" 'issue_id=2900' && ok || no "tickets create records the blocker by id"
 
+# github-setup --apply: every label the factory and its gate use, rework included.
+reply POST repos/o/r/labels '{}'
+fresh_calls
+"$FACTORY" github-setup --apply >/dev/null 2>&1
+for l in agent-task in-progress blocked rework merge risk:low risk:high; do
+  called POST repos/o/r/labels "name=$l" && ok || no "github-setup creates the $l label"
+done
+
 echo "scripts: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -26,6 +26,7 @@ LABELS=(
   "agent-task|1d76db|A ticket an agent completes without asking questions"
   "in-progress|fbca04|An agent run holds this ticket (also the lock)"
   "blocked|d93f0b|Needs a human: see the latest comment for the question"
+  "rework|e99695|The gate sent the PR back: conflict or red on the current base"
   "risk:low|0e8a16|Factory gate: low impact, merges when green"
   "risk:high|b60205|Factory gate: waits for the owner's merge label"
   "merge|0e8a16|The owner's go-ahead: the gate merges this high-impact PR"
