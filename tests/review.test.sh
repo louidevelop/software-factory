@@ -16,6 +16,9 @@ F() { "$FACTORY" "$@" 2>/dev/null; }
 P=$(mktemp -d)
 trap 'rm -rf "$P"' EXIT
 cd "$P" || exit 1
+# CI runners have no git identity; the throwaway repo needs one to commit.
+export GIT_AUTHOR_NAME=factory-test GIT_AUTHOR_EMAIL=test@example.invalid
+export GIT_COMMITTER_NAME=factory-test GIT_COMMITTER_EMAIL=test@example.invalid
 git init -q -b main
 mkdir -p .factory
 echo '{"version":1,"owners":["o"],"check":"true","review":{"model":"opus"}}' >.factory/config.json
