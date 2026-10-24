@@ -27,7 +27,8 @@ mkdir -p "$SRC/plugins"
 cp -R "$PLUGIN" "$SRC/plugins/factory"
 (cd "$SRC" && git init -q -b main && git add -A && G commit -qm factory)
 
-# A project that loaded the factory as the retired plugin, with its own permissions.
+# A project with settings of its own: permissions, its own plugins and marketplace, env, and a
+# stale hooks key that sync replaces.
 P="$W/project"
 mkdir -p "$P/.factory" "$P/.claude"
 cd "$P" || exit 1
@@ -35,12 +36,14 @@ git init -q -b main && G commit -q --allow-empty -m init
 echo '{"version":1,"owners":["o"],"check":"true"}' >.factory/config.json
 cat >.claude/settings.json <<'JSON'
 {
-  "extraKnownMarketplaces": {"software-factory": {"source": {"source": "github", "repo": "louidevelop/software-factory"}}},
-  "enabledPlugins": {"factory@software-factory": true},
+  "extraKnownMarketplaces": {"acme": {"source": {"source": "github", "repo": "acme/plugins"}}},
+  "enabledPlugins": {"frontend-design@claude-plugins-official": true, "lint@acme": false},
   "permissions": {"allow": ["Bash(make test)"], "deny": ["Read(./.env)"]},
+  "env": {"APP_MODE": "test"},
   "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "old"}]}]}
 }
 JSON
+cp .claude/settings.json "$W/settings-before.json"
 export CLAUDE_PROJECT_DIR="$P"
 
 # ---------- sync installs the thin layer ----------
@@ -55,7 +58,8 @@ for f in factory fetch hook; do [ -x ".factory/bin/$f" ] && ok || no ".factory/b
 
 S=.claude/settings.json
 jq -e '.permissions == {"allow": ["Bash(make test)"], "deny": ["Read(./.env)"]}' $S >/dev/null && ok || no "the project's permissions survive"
-jq -e 'has("enabledPlugins") or has("extraKnownMarketplaces") | not' $S >/dev/null && ok || no "sync removes the plugin keys"
+jq -e --slurpfile b "$W/settings-before.json" 'del(.hooks) == ($b[0] | del(.hooks))' $S >/dev/null && ok ||
+  no "sync leaves every key but hooks alone, the project's own plugins included"
 jq -e --slurpfile t "$PLUGIN/templates/settings-hooks.json" '.hooks == $t[0].hooks' $S >/dev/null && ok || no "sync owns the hooks key"
 jq -e '.hooks.SessionStart[0].hooks[0].command | test("\\.factory/bin/fetch$")' $S >/dev/null && ok || no "SessionStart runs the fetch"
 jq -c . $S >"$W/s" && mv "$W/s" $S

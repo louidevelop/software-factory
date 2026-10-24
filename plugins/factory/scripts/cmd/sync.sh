@@ -62,11 +62,11 @@ stage() {
     mkdir -p "$1/.claude/skills/$(basename "$(dirname "$f")")"
     stub "$f" >"$1/.claude/skills/$(basename "$(dirname "$f")")/SKILL.md"
   done
-  # settings.json: sync owns only the `hooks` key (replaced whole), so the project's permissions
-  # and everything else survive. The retired factory plugin's keys go: it and the thin layer at
-  # once would run every hook twice.
+  # settings.json: sync owns only the `hooks` key (replaced whole). Everything else is the
+  # project's, including its own plugins, and is never touched. (A leftover factory plugin is
+  # doctor's to report, not sync's to remove.)
   if [ -f "$SETTINGS" ]; then cat "$SETTINGS"; else echo '{}'; fi |
-    jq --slurpfile h "$T/settings-hooks.json" '.hooks = $h[0].hooks | del(.enabledPlugins, .extraKnownMarketplaces)' \
+    jq --slurpfile h "$T/settings-hooks.json" '.hooks = $h[0].hooks' \
       >"$1/$SETTINGS" 2>/dev/null || die "$SETTINGS is not valid JSON; fix it, then sync again"
 }
 
