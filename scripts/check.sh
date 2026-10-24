@@ -54,7 +54,15 @@ fi
 step "plugin manifests"
 if command -v claude >/dev/null 2>&1; then
   claude plugin validate --strict . >/dev/null || fail "marketplace manifest (claude plugin validate --strict .)"
-  claude plugin validate --strict plugins/factory >/dev/null || fail "plugin (claude plugin validate --strict plugins/factory)"
+  # Strict, except the one warning we want: the plugin has NO version on purpose, so Claude Code
+  # versions it by git commit and `claude plugin update` always moves projects to factory main.
+  # A fixed semver would freeze every project on that version until someone bumps it.
+  PLUGIN_REPORT=$(claude plugin validate --json plugins/factory 2>/dev/null)
+  jq -e '.success and ([.manifest.errors[]?, (.contents[]?.errors[]?)] | length == 0)
+         and ([.manifest.warnings[]?, (.contents[]?.warnings[]?) | select(.path != "version")] | length == 0)' \
+    <<<"$PLUGIN_REPORT" >/dev/null || fail "plugin (claude plugin validate --json plugins/factory)"
+  jq -e '.version == null' plugins/factory/.claude-plugin/plugin.json >/dev/null ||
+    fail "plugins/factory/.claude-plugin/plugin.json must not pin a version (projects follow main)"
 else
   echo "claude CLI not installed; skipping manifest validation"
 fi
