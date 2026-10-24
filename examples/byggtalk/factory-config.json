@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "owners": ["louidevelop"],
+  "check": "npm run check",
+  "fix": [{ "glob": "*.{ts,mjs,cjs,json,jsonc}", "command": "node_modules/.bin/biome check --write {file}" }],
+  "setup": { "command": "npm ci", "copy": [".env"] },
+  "block": [
+    { "pattern": "drizzle-kit +push", "reason": "schema changes go: edit src/db/schema.ts → npm run db:generate → commit the migration." },
+    { "pattern": "(npm +run +)?db:migrate", "reason": "migrations are applied by a human after review." },
+    { "pattern": "supabase +db +reset", "reason": "never reset a database from an agent session." },
+    { "pattern": "(^|[ ;&|])psql ", "reason": "use Drizzle queries in src/db/queries/ or a migration." },
+    { "pattern": "graph\\.facebook\\.com|api\\.openai\\.com|api\\.resend\\.com", "reason": "providers are called only through their adapter module." },
+    { "pattern": "(^|[ ;&|])(fly|flyctl) +deploy", "reason": "the human deploys after review." }
+  ],
+  "paths": {
+    "migrations": ["drizzle/**"],
+    "sensitive": ["src/pipeline/states.ts", "src/structure/**", "src/whatsapp/verify.ts"],
+    "guardrails": ["biome.json", "tsconfig.json", "scripts/check-*.sh", "Dockerfile", "fly.toml"],
+    "dependencies": [],
+    "generated": ["drizzle/meta/**"],
+    "tests": ["test/**"]
+  },
+  "limits": { "lines": 400, "files": 20 },
+  "review": { "model": "opus" },
+  "run": { "maxAttempts": 3, "maxTurns": 80, "baseBranch": "main" }
+}

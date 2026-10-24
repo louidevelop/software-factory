@@ -1,0 +1,22 @@
+{
+  "extraKnownMarketplaces": {
+    "software-factory": {
+      "source": { "source": "github", "repo": "louidevelop/software-factory" }
+    }
+  },
+  "enabledPlugins": {
+    "factory@software-factory": true
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr review:*)"
+    ]
+  }
+}

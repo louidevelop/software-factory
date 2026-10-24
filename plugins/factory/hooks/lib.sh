@@ -33,12 +33,20 @@ factory_cfg() {
 
 # Globs everywhere in the factory share one dialect, the same as the classifier's:
 # `*` and `**` match any characters INCLUDING `/`, `**/` also matches zero directories,
-# `?` matches one character. So `*.py` matches `src/app/main.py`.
+# `?` matches one character, `{a,b}` matches either. So `*.py` matches `src/app/main.py`.
 factory_glob_to_ere() {
-  local glob=$1 out="" i c
+  local glob=$1 out="" i c depth=0
   for ((i = 0; i < ${#glob}; i++)); do
     c=${glob:i:1}
-    if [ "${glob:i:3}" = "**/" ]; then
+    if [ "$c" = "{" ]; then
+      out+="("
+      depth=$((depth + 1))
+    elif [ "$c" = "}" ] && [ $depth -gt 0 ]; then
+      out+=")"
+      depth=$((depth - 1))
+    elif [ "$c" = "," ] && [ $depth -gt 0 ]; then
+      out+="|"
+    elif [ "${glob:i:3}" = "**/" ]; then
       out+="(.*/)?"
       i=$((i + 2))
     elif [ "${glob:i:2}" = "**" ]; then

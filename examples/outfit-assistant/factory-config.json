@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "owners": ["louidevelop"],
+  "check": "npm run check",
+  "fix": [{ "glob": "*.{ts,tsx,js,jsx,json}", "command": "npx biome check --write {file}" }],
+  "setup": { "command": "npm install", "copy": [".env.local"] },
+  "block": [
+    { "pattern": "supabase +db +(reset|push)", "reason": "database resets and pushes are done by a human." },
+    { "pattern": "supabase +functions +deploy", "reason": "Edge Functions are deployed by a human after review." }
+  ],
+  "paths": {
+    "migrations": ["supabase/migrations/**"],
+    "sensitive": ["supabase/functions/**", "src/lib/services/auth-session.ts", "src/lib/ai/**"],
+    "guardrails": ["biome.json", "tsconfig.json", "scripts/check-*.sh", "src/global.css", "app.json"],
+    "dependencies": ["supabase/functions/*/deno.json"],
+    "generated": ["expo-env.d.ts"],
+    "tests": []
+  },
+  "limits": { "lines": 400, "files": 20 },
+  "review": { "model": "opus" },
+  "run": { "maxAttempts": 3, "maxTurns": 80, "baseBranch": "main" }
+}

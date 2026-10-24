@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# factory — the factory's command line. Every deterministic step of the pipeline is a
+# subcommand here, so skills and the unattended loop run the exact same code.
+set -u
+FACTORY_SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+FACTORY_PLUGIN="$(dirname "$FACTORY_SCRIPTS")"
+export FACTORY_SCRIPTS FACTORY_PLUGIN
+
+usage() {
+  cat <<'USAGE'
+usage: factory <command> [args]
+
+  doctor                 check prerequisites, config, and GitHub access for this project
+  github-setup [--machine-user <login>] [--apply]
+                         labels, merge settings, branch protection (shows changes first)
+  sync [--apply | --pr]  compare factory-managed files with the latest factory;
+                         --apply writes them, --pr opens a "factory sync" PR
+  start [<issue> | next] pick up a ticket: lock, preflight, prerequisites, drift, worktree
+  review <issue>         local review: reviewer + one judge per blocking finding
+  review <issue> --resolve
+                         after fixes: a judge checks each confirmed finding is resolved
+  open-pr <issue>        push the branch and open the PR with the review attached
+  run [<parent-issue>]   unattended loop: start → implement → review → fix → open-pr, repeat
+  block <issue> <reason> label a ticket blocked and comment the reason
+USAGE
+}
+
+cmd=${1:-help}
+shift || true
+case "$cmd" in
+  doctor | github-setup | sync | start | review | open-pr | run | block)
+    exec bash "$FACTORY_SCRIPTS/cmd/$cmd.sh" "$@"
+    ;;
+  help | -h | --help) usage ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac

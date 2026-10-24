@@ -104,6 +104,11 @@ glob_case src/main.ts '*.py' 1
 glob_case a.b.c 'a?b?c' 0
 glob_case 'docs/specs/001-x.md' 'docs/specs/*' 0
 glob_case 'xdocs/specs/1.md' 'docs/specs/*' 1
+glob_case src/a.tsx '*.{ts,tsx}' 0
+glob_case src/a.ts '*.{ts,tsx}' 0
+glob_case src/a.js '*.{ts,tsx}' 1
+glob_case 'a,b' 'a,b' 0
+glob_case 'pkg/(x).go' 'pkg/(x).go' 0
 
 echo "hooks: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

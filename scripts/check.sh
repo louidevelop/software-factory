@@ -32,6 +32,9 @@ fi
 step "hook tests"
 bash tests/hooks.test.sh || fail "hook tests"
 
+step "script tests"
+bash tests/scripts.test.sh || fail "script tests"
+
 if [ -d classifier ]; then
   step "classifier tests"
   node --test classifier/ || fail "classifier tests"
