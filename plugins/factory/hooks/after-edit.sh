@@ -8,12 +8,12 @@ set -u
 
 INPUT=$(cat)
 factory_require_jq
-CONFIG=$(factory_config)
-[ -f "$CONFIG" ] || exit 0
-
-ROOT=$(factory_root)
 FILE=$(jq -r '.tool_input.file_path // empty' <<<"$INPUT")
 [ -n "$FILE" ] && [ -f "$FILE" ] || exit 0
+FACTORY_ROOT_HINT=$(dirname "$FILE")
+CONFIG=$(factory_config)
+[ -f "$CONFIG" ] || exit 0
+ROOT=$(factory_root)
 case "$FILE" in
   "$ROOT"/*) REL=${FILE#"$ROOT"/} ;;
   /*) exit 0 ;; # outside the project

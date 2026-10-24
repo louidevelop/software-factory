@@ -80,6 +80,16 @@ expect "stop-gate blocks on red check" stop-gate.sh 2 "tests: 1 failed" '{"stop_
 expect "stop-gate lets go once already active" stop-gate.sh 0 "" '{"stop_hook_active": true}'
 rm "$PROJECT/FAIL_CHECK"
 
+# ---------- worktrees: the session's cwd / the edited file pick the checkout ----------
+WT=$(mktemp -d)
+(cd "$WT" && git init -q && mkdir -p .factory &&
+  echo '{"version":1,"owners":["o"],"check":"echo worktree-check-ran; exit 1"}' >.factory/config.json)
+expect "stop-gate uses the worktree named by cwd" stop-gate.sh 2 "worktree-check-ran" \
+  "$(jq -cn --arg c "$WT" '{stop_hook_active: false, cwd: $c}')"
+expect "stop-gate falls back to the project dir" stop-gate.sh 0 "" \
+  "$(jq -cn '{stop_hook_active: false, cwd: "/"}')"
+rm -rf "$WT"
+
 # ---------- no config: every hook is a no-op ----------
 mv "$PROJECT/.factory/config.json" "$PROJECT/.factory/off.json"
 expect "no config: Bash not blocked" block-dangerous.sh 0 "" "$(bash_input 'rm -rf build')"

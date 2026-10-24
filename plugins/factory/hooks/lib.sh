@@ -13,8 +13,19 @@ factory_require_jq() {
   fi
 }
 
-# The project root: Claude Code's project dir when set, else the git toplevel, else cwd.
+# The project root. A ticket runs in a git worktree, so when FACTORY_ROOT_HINT (a directory:
+# the edited file's, or the session's cwd from the hook input) sits in a checkout that has its
+# own .factory/config.json, that checkout wins. Otherwise: Claude Code's project dir, else the
+# git toplevel, else cwd.
 factory_root() {
+  local hinted
+  if [ -n "${FACTORY_ROOT_HINT:-}" ] && [ -d "$FACTORY_ROOT_HINT" ]; then
+    hinted=$(git -C "$FACTORY_ROOT_HINT" rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$hinted" ] && [ -f "$hinted/.factory/config.json" ]; then
+      printf '%s' "$hinted"
+      return
+    fi
+  fi
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
     printf '%s' "$CLAUDE_PROJECT_DIR"
   else
