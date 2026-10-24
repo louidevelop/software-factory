@@ -36,9 +36,11 @@ LABELS=(
   "feature|5319e7|Parent issue tracking a feature spec"
 )
 REPO_SETTINGS='{"allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":true,"allow_update_branch":true,"squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}'
-# Required checks: the project's own check workflow job and the factory gate.
+# Required checks: the project's own check workflow job and the factory gate. Not "up to date
+# before merge" (strict): a PR may be behind, because the gate checks it combined with the current
+# base right before merging, and strict would block the gate's own merge of a behind PR.
 PROTECTION=$(jq -cn '{
-  required_status_checks: {strict: true, contexts: ["check", "gate"]},
+  required_status_checks: {strict: false, contexts: ["check", "gate"]},
   enforce_admins: true,
   required_pull_request_reviews: null,
   restrictions: null,
@@ -50,7 +52,7 @@ echo "factory github-setup for $SLUG (base branch: $BASE)"
 echo "  labels: $(printf '%s ' "${LABELS[@]%%|*}")"
 echo "  merge settings: squash only, delete branch on merge, allow update branch"
 [ -n "$MACHINE" ] && echo "  collaborator: $MACHINE with write (push) access — can push and open PRs; the gate decides merges"
-echo "  branch protection on $BASE: required checks 'check' + 'gate', up to date before merge, no force push, admins included"
+echo "  branch protection on $BASE: required checks 'check' + 'gate', no force push, admins included"
 if [ "$APPLY" -ne 1 ]; then
   echo
   echo "dry run — re-run with --apply to make these changes"

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { gate, ownerApproval } from "./gate.mjs";
 
 const GREEN = { pending: [], failed: [], passed: ["check"] };
-const base = { risk: "low", owners: ["Owner"], headSha: "h2", draft: false, reviews: [], checks: GREEN, behindBy: 0 };
+const base = { risk: "low", owners: ["Owner"], headSha: "h2", draft: false, reviews: [], checks: GREEN };
 const review = (user, state, commit_id, submitted_at) => ({ user, state, commit_id, submitted_at });
 
 test("low + green merges", () => assert.deepEqual(gate(base).merge, true));
@@ -34,7 +34,6 @@ test("comments do not reset an approval", () => {
   assert.equal(ownerApproval(["Owner"], reviews, "h2").approved, true);
 });
 
-test("drafts pass but never merge; behind-base waits", () => {
+test("drafts pass but never merge", () => {
   assert.deepEqual([gate({ ...base, draft: true }).pass, gate({ ...base, draft: true }).merge], [true, false]);
-  assert.equal(gate({ ...base, behindBy: 2 }).merge, false);
 });

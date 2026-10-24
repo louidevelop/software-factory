@@ -63,8 +63,9 @@ Write, adapting the templates:
   layer, fences, conventions. Keep only judgment calls. Leave the `factory:begin/end` markers.
 - `CLAUDE.md` — exactly `@AGENTS.md`.
 - Linter/type-checker/fence configs, `scripts/check-*.sh`, the toolchain pin, lockfile.
-- `.github/workflows/check.yml` — runs the `check` command and nothing else, on `pull_request` and
-  pushes to the base branch, with the job named `check`. Pinned toolchain from the version file.
+- `.github/workflows/check.yml` — runs the `check` command and nothing else, on `pull_request`,
+  pushes to the base branch and `workflow_dispatch` (the gate dispatches it on the PR combined with
+  the current base before merging), with the job named `check`. Pinned toolchain from the version file.
 - `.claude/settings.json` — from `templates/settings.json` (enables the plugin, denies secrets and
   merging). Add a `deny` entry for each `block` command that has a simple prefix.
 - `.gitignore` — must cover `.env` and `.env.*` but not `.env.example`. Write `.env.example` with

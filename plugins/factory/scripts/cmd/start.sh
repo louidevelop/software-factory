@@ -46,17 +46,7 @@ fi
 # 2b. Features whose tickets are all closed get their "Archive spec" PR.
 bash "$FACTORY_SCRIPTS/cmd/archive-specs.sh" || warn "could not check for finished specs"
 
-# 3. Factory PRs that fell behind the base cannot merge (the gate requires up to date).
-#    Updating them here, as the machine user, triggers a fresh check + gate run.
-for n in $(gh pr list --state open --json number,headRefName -q '.[] | select(.headRefName | startswith("ticket/")) | .number'); do
-  head=$(gh pr view "$n" --json headRefOid -q .headRefOid)
-  behind=$(gh api "repos/$SLUG/compare/$BASE...$head" -q .behind_by 2>/dev/null || echo 0)
-  if [ "${behind:-0}" -gt 0 ]; then
-    gh pr update-branch "$n" >/dev/null 2>&1 && say "updated PR #$n with $BASE" || warn "could not update PR #$n"
-  fi
-done
-
-# 4. Pick the ticket.
+# 3. Pick the ticket.
 if [ "$WHICH" = next ]; then
   N=$(bash "$FACTORY_SCRIPTS/cmd/tickets.sh" next ${PARENT:+"$PARENT"}) || {
     say "no ticket is ready: every open agent-task is in progress, blocked, or waiting on a blocker"
@@ -76,18 +66,18 @@ OPEN_BLOCKERS=$(gh api "repos/$SLUG/issues/$N/dependencies/blocked_by" -q '[.[] 
 TITLE=$(jq -r .title <<<"$T")
 BODY=$(jq -r .body <<<"$T")
 
-# 5. Lock.
+# 4. Lock.
 gh issue edit "$N" --add-label in-progress >/dev/null || die "could not label #$N in-progress"
 say "#$N locked: $TITLE"
 
-# 6. Prerequisites: unticked boxes block. The human ticks them; secrets are never inspected.
+# 5. Prerequisites: unticked boxes block. The human ticks them; secrets are never inspected.
 UNTICKED=$(markdown_section "$BODY" Prerequisites | grep -E '^\s*[-*] \[ \]' | sed -E 's/^\s*[-*] \[ \] *//' | grep -vE '^(…|\.\.\.)?$' || true)
 if [ -n "$UNTICKED" ]; then
   factory_block_ticket "$N" "prerequisites not confirmed: $(paste -sd ';' <<<"$UNTICKED")"
   exit 5
 fi
 
-# 7. Worktree on a fresh branch from the base.
+# 6. Worktree on a fresh branch from the base.
 git fetch -q origin "$BASE" || die "could not fetch $BASE"
 BRANCH="ticket/$N-$(ticket_slug "$TITLE")"
 # Inside the project, so the session's working directory, file tools and the review subagents
@@ -122,7 +112,7 @@ else
   fi
 fi
 
-# 8. The base must be green before the ticket starts; a red base is not the ticket's fault.
+# 7. The base must be green before the ticket starts; a red base is not the ticket's fault.
 #    Only checked on a fresh branch: a reused worktree already carries the ticket's own work.
 CHECK=$(jq -r .check "$CONFIG")
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; then
@@ -133,7 +123,7 @@ if [ "$(git -C "$WT" rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; the
   fi
 fi
 
-# 9. Run state for the later steps (never committed: it lives in the git dir).
+# 8. Run state for the later steps (never committed: it lives in the git dir).
 STATE=$(cd "$WT" && factory_state_dir)
 printf '%s\n' "$N" >"$STATE/ticket"
 # A PR description draft to fill in, from the factory's template (the project may not have its

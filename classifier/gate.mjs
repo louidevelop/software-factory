@@ -3,9 +3,11 @@
 // approval from an OWNER (config.owners, read from the base branch) on the current head
 // commit — the machine user has write access, so "any approval" would let it wave its own
 // work through. An owner's later "changes requested" overrides their earlier approval.
+// Whether the PR is behind its base does not matter here: before merging, the caller checks the
+// PR combined with the current base (mergecheck.mjs).
 //
 // input = { risk, owners, headSha, draft, reviews: [{ user, state, commit_id, submitted_at }],
-//           checks: { pending: [name], failed: [name], passed: [name] }, behindBy }
+//           checks: { pending: [name], failed: [name], passed: [name] } }
 
 export function ownerApproval(owners, reviews, headSha) {
   const lower = new Set(owners.map((o) => o.toLowerCase()));
@@ -23,7 +25,7 @@ export function ownerApproval(owners, reviews, headSha) {
   return { approved: false, why: "waiting for an owner's approval" };
 }
 
-export function gate({ risk, owners, headSha, draft, reviews, checks, behindBy }) {
+export function gate({ risk, owners, headSha, draft, reviews, checks }) {
   if (checks.failed.length) return { pass: false, merge: false, summary: `checks failed: ${checks.failed.join(", ")}` };
   if (checks.pending.length) return { pass: false, merge: false, summary: `checks still running: ${checks.pending.join(", ")}` };
   if (checks.passed.length === 0) return { pass: false, merge: false, summary: "no check ran on this commit; the project's check workflow must run on pull requests" };
@@ -32,7 +34,5 @@ export function gate({ risk, owners, headSha, draft, reviews, checks, behindBy }
     if (!a.approved) return { pass: false, merge: false, summary: `high impact — ${a.why}` };
   }
   if (draft) return { pass: true, merge: false, summary: "draft PR — not merged until ready for review" };
-  if (behindBy > 0)
-    return { pass: false, merge: false, summary: `branch is ${behindBy} commit(s) behind the base; it is updated at the next \`factory start\` (or update it), then the gate re-runs` };
   return { pass: true, merge: true, summary: risk === "high" ? "high impact, approved by an owner — merging" : "low impact, checks green — merging" };
 }

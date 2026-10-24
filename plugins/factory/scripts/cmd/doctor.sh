@@ -32,6 +32,14 @@ fi
 [ "$(cat "$ROOT/CLAUDE.md" 2>/dev/null)" = "@AGENTS.md" ] && ok "CLAUDE.md imports AGENTS.md" || note "CLAUDE.md is not exactly '@AGENTS.md'"
 [ -f "$ROOT/.claude/settings.json" ] && jq -e '.enabledPlugins["factory@software-factory"] == true' "$ROOT/.claude/settings.json" >/dev/null 2>&1 &&
   ok ".claude/settings.json enables the factory plugin" || bad ".claude/settings.json does not enable factory@software-factory"
+CHECK_YML="$ROOT/.github/workflows/check.yml"
+if [ ! -f "$CHECK_YML" ]; then
+  bad ".github/workflows/check.yml missing (the gate runs it)"
+elif grep -q 'workflow_dispatch' "$CHECK_YML"; then
+  ok "check.yml can be dispatched (the gate checks PRs on the current base with it)"
+else
+  bad "check.yml has no workflow_dispatch: trigger; the gate needs it to check a PR on the current base"
+fi
 (cd "$ROOT" && bash "$FACTORY_SCRIPTS/cmd/sync.sh" >/dev/null 2>&1) && ok "factory-managed files are current" || note "factory-managed files are behind (factory sync)"
 
 echo "github"

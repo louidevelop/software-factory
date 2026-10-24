@@ -1,15 +1,18 @@
 // The factory gate, run as a GitHub Action on every pull_request / pull_request_review event:
-// classify → label + one sticky comment → wait for the other checks → decide → merge.
+// classify → label + one sticky comment → wait for the other checks → decide → check the PR on
+// the current base → merge.
 // Fails CLOSED: any error rates the PR high and fails the gate.
 import { readFileSync } from "node:fs";
 import { validateConfig } from "./config.mjs";
 import { gate } from "./gate.mjs";
 import { client } from "./github.mjs";
+import { mergeCheck } from "./mergecheck.mjs";
 import { classify, linkedIssue } from "./rules.mjs";
 
 const MARKER = "<!-- factory:gate -->";
 const SELF = process.env.FACTORY_GATE_CHECK_NAME || "gate";
 const WAIT_MS = Number(process.env.FACTORY_GATE_WAIT_MS || 25 * 60 * 1000);
+const MERGE_CHECK_MS = Number(process.env.FACTORY_GATE_MERGE_CHECK_MS || 25 * 60 * 1000);
 const POLL_MS = 15_000;
 
 const token = process.env["INPUT_GITHUB-TOKEN"] || process.env.GITHUB_TOKEN;
@@ -52,6 +55,17 @@ function render(result, decision) {
     return `- **${r.rule}** — ${r.detail}${files}`;
   });
   return [head, "", ...(lines.length ? lines : ["No impact rule fired."]), "", `**Gate:** ${decision}`].join("\n");
+}
+
+// The PR cannot merge as it stands (conflict, or red on the current base): mark its ticket
+// blocked so the human sees it in the ticket list, not only on the PR. Once per ticket.
+async function blockTicket(pr, why) {
+  const n = linkedIssue(pr.body ?? "");
+  if (!n) return;
+  const issue = await gh.get(`${R}/issues/${n}`);
+  if (issue.labels?.some((l) => l.name === "blocked")) return;
+  await gh.post(`${R}/issues/${n}/labels`, { labels: ["blocked"] });
+  await gh.post(`${R}/issues/${n}/comments`, { body: `Blocked by the factory gate: PR #${number} ${why}` });
 }
 
 async function otherChecks(sha) {
@@ -116,18 +130,37 @@ async function main() {
   const reviews = (await gh.paginate(`${R}/pulls/${number}/reviews`)).map((r) => ({
     user: r.user?.login, state: r.state, commit_id: r.commit_id, submitted_at: r.submitted_at,
   }));
-  const compare = await gh.get(`${R}/compare/${encodeURIComponent(pr.base.ref)}...${pr.head.sha}`);
-  const decision = gate({
-    risk: result.risk, owners: result.owners, headSha: pr.head.sha, draft: pr.draft, reviews, checks, behindBy: compare.behind_by,
-  });
+  const decision = gate({ risk: result.risk, owners: result.owners, headSha: pr.head.sha, draft: pr.draft, reviews, checks });
   log(decision.summary);
-  await upsertComment(render(result, decision.summary));
-
-  if (decision.merge) {
-    await gh.put(`${R}/pulls/${number}/merge`, { merge_method: "squash", sha: pr.head.sha });
-    log(`merged #${number}`);
+  if (!decision.merge) {
+    await upsertComment(render(result, decision.summary));
+    if (!decision.pass) process.exitCode = 1;
+    return;
   }
-  if (!decision.pass) process.exitCode = 1;
+
+  const base = pr.base.ref;
+  await upsertComment(render(result, `${decision.summary} once it is green on the current \`${base}\`…`));
+  const mc = await mergeCheck({ gh, R, number, headSha: pr.head.sha, baseRef: base, deadline: Date.now() + MERGE_CHECK_MS, sleep, log });
+  if (!mc.ok) {
+    log(mc.summary);
+    await upsertComment(render(result, `not merged — ${mc.summary}`));
+    if (mc.why !== "timeout") await blockTicket(pr, mc.summary).catch((err) => log(`could not block the ticket: ${err.message}`));
+    process.exitCode = 1;
+    return;
+  }
+
+  const merged = await gh.put(`${R}/pulls/${number}/merge`, { merge_method: "squash", sha: pr.head.sha });
+  log(`merged #${number}`);
+  const issue = linkedIssue(pr.body ?? "");
+  if (issue) await gh.del(`${R}/issues/${issue}/labels/blocked`).catch(() => {});
+  // The merge API cannot pin the base, so a merge that slipped in after the last read of it
+  // means this squash landed on a base the check did not see. Say so; pickup checks the base.
+  const parent = merged?.sha ? (await gh.get(`${R}/commits/${merged.sha}`)).parents?.[0]?.sha : mc.baseSha;
+  const how = mc.checked ? `checked against \`${base}\` ${mc.baseSha.slice(0, 7)} ([run](${mc.url}))` : `up to date with \`${base}\``;
+  const race = parent && parent !== mc.baseSha
+    ? `\n\n⚠️ Another merge landed on \`${base}\` between the check and this merge; that combination was not checked. \`factory start\` refuses to start a ticket if \`${base}\` is red.`
+    : "";
+  await upsertComment(render(result, `merged, ${how}${race}`));
 }
 
 main().catch(async (err) => {
