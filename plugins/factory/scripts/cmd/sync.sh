@@ -8,10 +8,10 @@ set -u
 . "$FACTORY_SCRIPTS/common.sh"
 factory_require git jq
 
-MODE=report
+MODE="report"
 case "${1:-}" in
-  --apply) MODE=apply ;;
-  --pr) MODE=pr ;;
+  --apply) MODE="apply" ;;
+  --pr) MODE="pr" ;; # quoted: `pr` is also a command (SC2209)
   "") ;;
   *) die "usage: factory sync [--apply | --pr]" ;;
 esac
