@@ -182,3 +182,32 @@ Current-state map: `factory-map.md`.
 ## Walkthrough status
 
 Steps 1–7, 9, 10 settled. Step 8 (learning loop) deferred. See `factory-build-plan.md` for build order.
+
+## Build notes — where the build had to differ (2026-10-24)
+
+Each deviation is forced by a platform fact found while building; the decision's intent stands.
+
+- **Free plan, private repos: no branch protection or rulesets** (GitHub returns "Upgrade to GitHub Pro").
+  GitHub auto-merge depends on them, so the gate merges itself: the gate action waits for the
+  project's other checks, then squash-merges when the gate passes. Agents are blocked from
+  `gh pr merge` / `gh pr review` (blocklist + permissions.deny). Without Pro, nothing stops a human
+  or a determined token from merging around the gate; `factory github-setup` applies real branch
+  protection automatically once the plan allows it.
+- **Classifier ships as a GitHub Action, not a reusable workflow.** A reusable workflow from a private
+  repo cannot check out the factory's code; an action from it can be `uses:`d once the factory repo's
+  Actions access is "user" (set). The managed caller is `.github/workflows/factory-gate.yml`.
+- **`.factory/config` is `.factory/config.json`.**
+- **Behind-base PRs are updated at pickup, not by the gate.** Commits made with `GITHUB_TOKEN` trigger
+  no workflows, so a gate-side branch update would stall the PR. `factory start` updates behind
+  `ticket/*` PRs as the machine user, which re-runs check + gate.
+- **Red `main` is detected at pickup by running `check` on a fresh base** (gate merges use
+  `GITHUB_TOKEN`, so no workflow runs on `main` after a merge; up-to-date + green PR makes `main` green
+  by construction).
+- **Spec archive PRs are opened by `factory start` / end of `factory run`, not a workflow** — same
+  `GITHUB_TOKEN` limit, and an Actions-created PR would not run the gate. The archive PR says
+  `Closes #<parent>`, so merging it also closes the feature issue.
+- **The factory-sync hash is content-checked**: a hand edit inside the `AGENTS.md` block counts as behind.
+- **Hooks follow the ticket's worktree** (the edited file's checkout, or the session cwd) rather than
+  the project dir, so a session started in the main checkout still gates the worktree it works in.
+- **Scripts target macOS's bash 3.2** (no bash-4 features; empty arrays guarded under `set -u`).
+- **Glob dialect** adds `{a,b}`; empty alternatives (`{a,}`) are not allowed (macOS ERE rejects them).

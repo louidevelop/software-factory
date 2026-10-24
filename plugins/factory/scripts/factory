@@ -24,13 +24,14 @@ usage: factory <command> [args]
   open-pr <issue>        push the branch and open the PR with the review attached
   run [<parent-issue>]   unattended loop: start → implement → review → fix → open-pr, repeat
   block <issue> <reason> label a ticket blocked and comment the reason
+  archive-specs          open an "Archive spec" PR for every feature whose tickets are all closed
 USAGE
 }
 
 cmd=${1:-help}
 shift || true
 case "$cmd" in
-  doctor | github-setup | sync | tickets | start | review | open-pr | run | block)
+  doctor | github-setup | sync | tickets | start | review | open-pr | run | block | archive-specs)
     exec bash "$FACTORY_SCRIPTS/cmd/$cmd.sh" "$@"
     ;;
   help | -h | --help) usage ;;

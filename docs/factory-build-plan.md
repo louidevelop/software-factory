@@ -1,5 +1,12 @@
 # Software factory — build plan
 
+> **Status 2026-10-24:** phases 1–7 built, each on its own branch/PR (stacked). Verified with the
+> factory's own `scripts/check.sh` (hook, script, review and classifier tests) and on
+> `louidevelop/factory-sandbox`. Not yet verified live: anything that needs headless `claude -p`
+> (the implement/fix/review sessions) — its login had expired on this machine — and the high-impact
+> approval path, which needs the machine user (the owner cannot approve PRs the owner opened).
+> See "Build notes" in `factory-decisions.md` for where the build differs from the plan.
+
 Decisions: `factory-decisions.md`. Each phase ends with a demo on a throwaway **sandbox** project and lands as a reviewed PR in the factory repo. outfit-assistant and byggtalk are not touched until all phases pass.
 
 The sandbox uses a non-TypeScript stack (e.g. a small Python service), so tech-generality is tested from the start, not assumed.

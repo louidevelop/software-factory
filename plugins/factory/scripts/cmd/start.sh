@@ -43,6 +43,9 @@ if ! bash "$FACTORY_SCRIPTS/cmd/sync.sh" >/dev/null 2>&1; then
   bash "$FACTORY_SCRIPTS/cmd/sync.sh" --pr || warn "could not open the factory sync PR"
 fi
 
+# 2b. Features whose tickets are all closed get their "Archive spec" PR.
+bash "$FACTORY_SCRIPTS/cmd/archive-specs.sh" || warn "could not check for finished specs"
+
 # 3. Factory PRs that fell behind the base cannot merge (the gate requires up to date).
 #    Updating them here, as the machine user, triggers a fresh check + gate run.
 for n in $(gh pr list --state open --json number,headRefName -q '.[] | select(.headRefName | startswith("ticket/")) | .number'); do

@@ -1,16 +1,44 @@
 # Software factory
 
 Guardrails and pipeline for agentic coding, shared across projects:
-spec → tickets → agent run (local verification loop) → local review → PR → risk classifier → auto-merge or human review.
 
-Tech-general: the factory defines a contract each project fills with its own stack, declared in `.factory/config`.
+```
+feature-spec ─▶ create-tickets ─▶ factory start ─▶ implement (hooks) ─▶ factory review ─▶ factory open-pr ─▶ gate
+  spec PR,        sub-issues,       lock, worktree,   check gate, fix     reviewer + one       Local review      classify, label,
+  owner approves  blocked-by        green base        after edit,         judge per finding    attached          merge low / wait
+                                                       blocklist                                                  for owner on high
+```
 
-## Docs
+Tech-general: the factory defines a contract each project fills with its own stack, declared in
+`.factory/config.json` (schema: `plugins/factory/templates/config.schema.json`).
 
-- [`docs/factory-map.md`](docs/factory-map.md): what the factory looked like before this repo, mapped from outfit-assistant and byggtalk.
-- [`docs/factory-decisions.md`](docs/factory-decisions.md): the decision log, one section per pipeline step.
-- [`docs/factory-build-plan.md`](docs/factory-build-plan.md): build order. Each phase ends with a demo on a sandbox project.
+## What's here
+
+| Path | What |
+|---|---|
+| `plugins/factory/hooks/` | after-edit (fix + feedback), stop-gate (check must be green), block-dangerous (secrets, history, merging, project extras) |
+| `plugins/factory/skills/` | `factory-bootstrap`, `feature-spec`, `create-tickets`, `start-ticket`, `run-tickets` |
+| `plugins/factory/scripts/factory` | the CLI every skill and the loop use: `doctor`, `github-setup`, `sync`, `tickets`, `start`, `review`, `open-pr`, `run`, `block`, `archive-specs` |
+| `plugins/factory/prompts/` | fixed prompts for implement, fix, reviewer, judge, resolve |
+| `plugins/factory/templates/` | config, `AGENTS.md` + managed block, settings, spec, ticket, PR, gate workflow, shim |
+| `classifier/` | the gate: impact rules, owner-approval gate, GitHub Action (`uses: louidevelop/software-factory/classifier@main`) |
+| `examples/` | outfit-assistant and byggtalk as worked examples of the contract |
+| `docs/` | the current-state map, the decision log (binding), the build plan |
+
+## Using it in a project
+
+1. In Claude Code: `/plugin marketplace add louidevelop/software-factory`, install `factory@software-factory`.
+2. New project: ask for the **factory-bootstrap** skill. It interviews, picks a tool per slot,
+   scaffolds, sets up GitHub, and proves every guardrail fires.
+3. Features: **feature-spec** → owner approves the spec PR → **create-tickets** for that spec.
+   Small work: **create-tickets** directly.
+4. Work: **start-ticket** (interactive) or **run-tickets** (`factory run`, unattended, as the machine user).
+
+Prerequisites on a project machine: bash (3.2+), git, gh, jq, claude. The machine user needs a
+classic token with `repo` scope (fine-grained tokens cannot reach repos where it is a collaborator).
 
 ## Working on the factory
 
-Every change lands through a PR the owner reviews. Projects follow `main`, so `main` must always work.
+Every change lands through a PR the owner reviews; projects follow `main`, so `main` must always
+work. Run `scripts/check.sh` (CI runs the same). Rules for agents: `AGENTS.md`.
+To try an unmerged factory branch in a project: `export FACTORY_HOME=~/code/software-factory/plugins/factory`.

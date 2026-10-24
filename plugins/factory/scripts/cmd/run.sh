@@ -56,7 +56,11 @@ while :; do
   code=$?
   case $code in
     0) ;;
-    3) say "nothing ready to start — loop done"; exit 0 ;;
+    3)
+      bash "$FACTORY_SCRIPTS/cmd/archive-specs.sh" || warn "could not check for finished specs"
+      say "nothing ready to start — loop done"
+      exit 0
+      ;;
     4) die "the base branch is red; fix it before the loop continues" ;;
     5) continue ;; # blocked at pickup (prerequisites); try the next ticket
     *) die "start failed (exit $code)" ;;
