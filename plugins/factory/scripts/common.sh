@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # common.sh — sourced by every scripts/cmd/*.sh. Not run directly.
+# A command started by an older runtime's scripts/factory, before a fetch replaced the runtime under
+# it, has only FACTORY_SCRIPTS (FACTORY_DIR was FACTORY_PLUGIN then).
+FACTORY_DIR=${FACTORY_DIR:-$(dirname "$FACTORY_SCRIPTS")}
+export FACTORY_DIR
 # shellcheck source=../hooks/lib.sh
 . "$FACTORY_DIR/hooks/lib.sh"
 

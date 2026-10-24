@@ -36,6 +36,11 @@ sed -i.bak 's/^- Never guess\./- Guess freely./' AGENTS.md && rm -f AGENTS.md.ba
 "$FACTORY" sync >/dev/null 2>&1
 [ $? -eq 10 ] && ok || no "sync notices a hand edit inside the block"
 
+# A runtime that a fetch replaced mid-run: the older scripts/factory that started the command
+# exported FACTORY_SCRIPTS (and FACTORY_PLUGIN), not FACTORY_DIR.
+env -u FACTORY_DIR FACTORY_SCRIPTS="$PLUGIN/scripts" FACTORY_PLUGIN="$PLUGIN" bash "$PLUGIN/scripts/cmd/prompt.sh" factory-judge 2>&1 |
+  grep -q 'You are a judge' && ok || no "a command started by an older scripts/factory still runs"
+
 # ---------- GitHub through REST only ----------
 export FAKE_GH_DIR="$P/.fake-gh" PATH="$TESTS/fake-gh:$PATH"
 mkdir -p "$FAKE_GH_DIR/replies"
