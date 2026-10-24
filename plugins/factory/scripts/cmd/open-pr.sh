@@ -52,11 +52,12 @@ BODY+=$'\n'"$(jq -r '
 ' "$REVIEW")"
 
 git push -q -u origin "$BRANCH" || die "push failed"
-TITLE=$(gh issue view "$N" --json title -q .title)
-EXISTING=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+TITLE=$(factory_api "issues/$N" -q .title) || die "cannot read issue #$N"
+EXISTING=$(factory_open_pr "$BRANCH") || die "cannot list the open PRs for $BRANCH"
 if [ -n "$EXISTING" ]; then
-  gh pr edit "$EXISTING" --body "$BODY" >/dev/null && say "updated PR #$EXISTING"
+  factory_api "pulls/$EXISTING" -X PATCH -f body="$BODY" >/dev/null || die "could not update PR #$EXISTING"
+  say "updated PR #$EXISTING"
 else
-  gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY"
+  factory_pr_create "$BASE" "$BRANCH" "$TITLE" "$BODY" || die "could not open the PR"
 fi
 say "the factory gate now classifies the PR and merges it, or asks the owner"

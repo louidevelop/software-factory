@@ -20,6 +20,9 @@ non-obvious choice goes in a comment next to the code it governs.
 - **Local prerequisites are bash, git, gh, jq, claude.** Hooks and scripts may not need Node,
   Python, or anything else on a project machine. Node is allowed only in `classifier/` (CI only)
   and in this repo's own dev scripts.
+- **GitHub through REST only.** Every GitHub call in `plugins/factory/` is `gh api` REST
+  (`factory_api` in `scripts/common.sh`), and skills and prompts say the same. Claude's cloud proxy
+  answers GraphQL with 403, and `gh issue`, `gh pr`, `gh repo view` and `gh label` all use it.
 - **Hooks fail closed.** A hook that cannot read its input exits 2. Exit 2 + stderr is the only
   channel that reaches the model; exit 1 blocks nothing.
 - **One glob dialect.** `*`/`**` match across `/`, `**/` also matches zero dirs. Bash
@@ -34,5 +37,6 @@ non-obvious choice goes in a comment next to the code it governs.
 ## Tests
 
 - Every hook behaviour has a case in `tests/hooks.test.sh`; every classifier rule has fixtures in
-  `classifier/*.test.mjs`. Add the case in the same change as the behaviour.
+  `classifier/*.test.mjs`; the scripts' GitHub logic is tested in `tests/scripts.test.sh` against
+  `tests/fake-gh/gh`, which serves only `gh api` replies. Add the case in the same change as the behaviour.
 - Never weaken or delete a test to make `check` pass.

@@ -56,7 +56,8 @@ PARENT=$(scripts/factory tickets feature docs/specs/NNN-<slug>.md "<feature>")
 ```
 
 Then replace `#{{PARENT}}` in the spec with the parent number, commit, push, and open the PR:
-`gh pr create --title "Spec NNN: <feature>" --body "Spec for #$PARENT. The spec PR is the human's approval of behaviour, decisions and design; tickets are created from it afterwards."`
+`gh api "repos/$(scripts/factory repo)/pulls" -f base=<base> -f head=spec/NNN-<slug> -f title="Spec NNN: <feature>" -f body="Spec for #$PARENT. The spec PR is the human's approval of behaviour, decisions and design; tickets are created from it afterwards." -q .html_url`
+(REST: `gh pr create` uses GraphQL, which fails in cloud sessions).
 
 The PR touches `docs/specs/`, so the gate always routes it to the owner. Report the PR and parent
 URLs and the decisions folded in. Tickets are created later, when the user asks (create-tickets),

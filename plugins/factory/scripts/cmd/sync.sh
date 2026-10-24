@@ -88,7 +88,8 @@ fi
 
 if [ "$MODE" = pr ]; then
   factory_require gh
-  if gh pr list --state open --json headRefName -q '.[].headRefName' | grep -q '^factory-sync'; then
+  OPEN_HEADS=$(factory_api_list "pulls?state=open&per_page=100") || die "cannot list open PRs"
+  if jq -r '.[].head.ref' <<<"$OPEN_HEADS" | grep -q '^factory-sync'; then
     say "a factory sync PR is already open; leaving it for review"
     exit 0
   fi
@@ -117,7 +118,7 @@ if [ "$MODE" = pr ]; then
   git commit -qm "factory sync: update factory-managed files" -m "Updated: ${BEHIND[*]}" ||
     die "nothing to commit after sync"
   git push -q -u origin "$BRANCH"
-  gh pr create --base "$BASE" --head "$BRANCH" --title "factory sync" --body "$(
+  factory_pr_create "$BASE" "$BRANCH" "factory sync" "$(
     cat <<BODY
 Updates the files the software factory manages in this project to the latest factory \`main\`.
 

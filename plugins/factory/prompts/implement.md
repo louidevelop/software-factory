@@ -2,8 +2,11 @@ You are one unattended run of the software factory, working on ticket #{{N}} in 
 (branch `{{BRANCH}}`). Nobody is watching: never ask questions and never wait for an answer.
 `F` below means `.factory/bin/factory`.
 
-1. Read the ticket (`gh issue view {{N}}`), the spec it links if any (under `docs/specs/`, never
-   `docs/specs/archive/` — that is history, not current behaviour), and `AGENTS.md`.
+1. Read the ticket with its comments (`F tickets show {{N}}`: the owner answers earlier blocked
+   questions in comments), the spec it links if any (under `docs/specs/`, never
+   `docs/specs/archive/` — that is history, not current behaviour), and `AGENTS.md`. For anything
+   else on GitHub use `gh api` (REST), never `gh issue` or `gh pr`: they use GraphQL, which fails in
+   cloud sessions.
 2. Drift check, before changing anything: compare the ticket's Scope, Decisions and "copy the
    pattern from" references with the current code. If anything the ticket relies on does not match
    — a path moved, a function it names is gone, a decision contradicts the code — do not adapt the

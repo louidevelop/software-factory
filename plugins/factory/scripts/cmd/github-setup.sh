@@ -56,7 +56,10 @@ fi
 
 for l in "${LABELS[@]}"; do
   IFS='|' read -r name color desc <<<"$l"
-  gh label create "$name" -R "$SLUG" --color "$color" --description "$desc" --force >/dev/null && say "label $name"
+  # Create, or update the label that already exists (REST has no upsert).
+  { factory_api labels -f name="$name" -f color="$color" -f description="$desc" >/dev/null 2>&1 ||
+    factory_api "labels/$name" -X PATCH -f color="$color" -f description="$desc" >/dev/null; } &&
+    say "label $name" || warn "could not create label $name"
 done
 gh api -X PATCH "repos/$SLUG" --input - <<<"$REPO_SETTINGS" >/dev/null && say "merge settings applied"
 if OUT=$(gh api -X PUT "repos/$SLUG/branches/$BASE/protection" --input - <<<"$PROTECTION" 2>&1); then

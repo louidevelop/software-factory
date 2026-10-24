@@ -23,7 +23,9 @@ Every `factory` command takes the ticket number and finds the worktree itself.
 
 ## 2. Implement
 
-- Read the ticket (`gh issue view <n>`), the spec it links (never `docs/specs/archive/`), `AGENTS.md`.
+- Read the ticket with its comments (`$FACTORY tickets show <n>`: the owner answers blocked questions
+  in comments), the spec it links (never `docs/specs/archive/`), `AGENTS.md`. Reach GitHub only through
+  `$FACTORY` or `gh api` (REST): `gh issue` and `gh pr` use GraphQL, which fails in cloud sessions.
 - Drift check before any change: if the ticket's Scope, Decisions or pattern references do not match
   the code, run `$FACTORY block <n> "<what drifted>"` and stop. Never adapt a ticket yourself.
 - A question the ticket, spec and code do not answer → `$FACTORY block <n> "<question>"` and stop.

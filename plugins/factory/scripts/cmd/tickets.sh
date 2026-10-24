@@ -5,21 +5,15 @@
 #                                                        agent-task issue, linked as sub-issue
 #   factory tickets next [<parent>]                      the next ticket an agent may start
 #   factory tickets list <parent>                        sub-issues with state and blockers
+#   factory tickets show <n>                             the ticket with its comments, for agents
 set -u
 # shellcheck source=../common.sh
 . "$FACTORY_SCRIPTS/common.sh"
 factory_require gh jq
 cd "$(factory_root)" || exit 1
-SLUG=$(factory_repo_slug)
-[ -n "$SLUG" ] || die "no GitHub repo for $(pwd)"
-R="repos/$SLUG"
+factory_repo_slug >/dev/null || die "no GitHub repo for $(pwd)"
 
-issue_id() { gh api "$R/issues/$1" -q .id; }
-number_from_url() { grep -oE '[0-9]+$'; }
-
-open_blockers() {
-  gh api "$R/issues/$1/dependencies/blocked_by" -q '[.[] | select(.state == "open") | .number] | join(" ")' 2>/dev/null
-}
+issue_id() { factory_api "issues/$1" -q .id; }
 
 cmd=${1:-}
 shift || true
@@ -27,10 +21,10 @@ case "$cmd" in
   feature)
     SPEC=${1:?usage: factory tickets feature <spec-path> <title>}
     TITLE=${2:?usage: factory tickets feature <spec-path> <title>}
-    gh issue create --title "Feature: $TITLE" --label feature --body "Tracks the feature specified in \`$SPEC\`.
+    factory_api issues -f title="Feature: $TITLE" -f "labels[]=feature" -q .number -f body="Tracks the feature specified in \`$SPEC\`.
 
 The spec is the source of truth for behaviour and decisions; its tickets are this issue's
-sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/archive/\`." | number_from_url
+sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/archive/\`."
     ;;
 
   create)
@@ -54,15 +48,16 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
       shift
     done
     [ -f "$BODY" ] || die "body file not found: $BODY"
-    N=$(gh issue create --title "$TITLE" --label agent-task --body-file "$BODY" | number_from_url)
-    [ -n "$N" ] || die "issue creation failed"
+    N=$(factory_api issues -f title="$TITLE" -f "labels[]=agent-task" -f body="$(cat "$BODY")" -q .number) ||
+      die "issue creation failed"
+    [[ $N =~ ^[0-9]+$ ]] || die "issue creation failed"
     if [ -n "$PARENT" ]; then
-      gh api -X POST "$R/issues/$PARENT/sub_issues" -F sub_issue_id="$(issue_id "$N")" >/dev/null ||
+      factory_api "issues/$PARENT/sub_issues" -X POST -F sub_issue_id="$(issue_id "$N")" >/dev/null ||
         warn "#$N created but not linked under #$PARENT"
     fi
     # bash 3.2 (macOS) treats an empty array as unset under `set -u`, hence the +"…" form.
     for b in ${BLOCKERS[@]+"${BLOCKERS[@]}"}; do
-      gh api -X POST "$R/issues/$N/dependencies/blocked_by" -F issue_id="$(issue_id "$b")" >/dev/null ||
+      factory_api "issues/$N/dependencies/blocked_by" -X POST -F issue_id="$(issue_id "$b")" >/dev/null ||
         warn "#$N created but 'blocked by #$b' was not recorded"
     done
     echo "$N"
@@ -70,16 +65,23 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
 
   next)
     PARENT=${1:-}
+    # A parent's sub-issues keep their order (the spec's ticket order); otherwise oldest first.
+    # Both lists carry each issue's labels, so only the blockers cost a call per ticket.
     if [ -n "$PARENT" ]; then
-      CANDIDATES=$(gh api "$R/issues/$PARENT/sub_issues" -q '.[] | select(.state == "open") | .number')
+      ISSUES=$(factory_api_list "issues/$PARENT/sub_issues?per_page=100") || die "cannot read #$PARENT's sub-issues"
     else
-      CANDIDATES=$(gh issue list --label agent-task --state open --limit 200 --json number -q 'sort_by(.number) | .[].number')
+      ISSUES=$(factory_api_list "issues?labels=agent-task&state=open&sort=created&direction=asc&per_page=100") ||
+        die "cannot list agent-task issues"
     fi
+    CANDIDATES=$(jq -r '.[] | select(.state == "open" and .pull_request == null)
+      | select([.labels[].name] | index("agent-task") and (index("in-progress") or index("blocked") | not))
+      | .number' <<<"$ISSUES")
     for n in $CANDIDATES; do
-      LABELS=$(gh issue view "$n" --json labels -q '.labels[].name')
-      grep -qx agent-task <<<"$LABELS" || continue
-      grep -qxE 'in-progress|blocked' <<<"$LABELS" && continue
-      [ -z "$(open_blockers "$n")" ] || continue
+      b=$(factory_open_blockers "$n") || {
+        warn "#$n: cannot read its blockers; skipping it"
+        continue
+      }
+      [ -z "$b" ] || continue
       echo "$n"
       exit 0
     done
@@ -88,14 +90,24 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
 
   list)
     PARENT=${1:?usage: factory tickets list <parent>}
-    for n in $(gh api "$R/issues/$PARENT/sub_issues" -q '.[].number'); do
-      gh issue view "$n" --json number,state,title,labels -q '"#\(.number) \(.state) [\([.labels[].name] | join(","))] \(.title)"' |
-        tr -d '\n'
-      b=$(open_blockers "$n")
+    ISSUES=$(factory_api_list "issues/$PARENT/sub_issues?per_page=100") || die "cannot read #$PARENT's sub-issues"
+    while IFS=$'\t' read -r n line; do
+      printf '%s' "$line"
+      b=$(factory_open_blockers "$n") || b="?"
       [ -n "$b" ] && printf '  (blocked by #%s)' "${b// /, #}"
       echo
-    done
+    done < <(jq -r '.[] | "\(.number)\t#\(.number) \(.state | ascii_upcase) [\([.labels[].name] | join(","))] \(.title)"' <<<"$ISSUES")
     ;;
 
-  *) die "usage: factory tickets feature|create|next|list ..." ;;
+  show)
+    N=${1:?usage: factory tickets show <n>}
+    T=$(ticket_json "$N") || die "cannot read issue #$N"
+    jq -r '"#\(.number) \(.title)",
+      "\(.state) · labels: \([.labels[].name] | join(", ")) · \(.html_url)",
+      "", (.body // ""), "",
+      "## Comments (\(.comments | length)), oldest first",
+      (.comments[] | "", "--- @\(.author), \(.created_at)", .body)' <<<"$T"
+    ;;
+
+  *) die "usage: factory tickets feature|create|next|list|show ..." ;;
 esac

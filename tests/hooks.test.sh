@@ -43,7 +43,8 @@ for cmd in \
   'cat .env' 'source .env.local' 'cp .env /tmp/x' 'grep KEY .env' 'printenv' 'env | grep TOKEN' \
   'echo $OPENAI_API_KEY' 'git push --force origin x' 'git push -f' 'git reset --hard HEAD~1' \
   'git clean -fd' 'git branch -D x' 'rm -rf build' 'rm -fr /' 'sudo ls' 'npm publish' \
-  'cargo publish' 'gh pr merge 3 --squash' 'gh pr review 3 --approve' 'gh api -X PUT repos/o/r/pulls/3/merge' 'psql -c "DROP TABLE users"' 'echo "truncate table events"' 'migrate --remote'; do
+  'cargo publish' 'gh pr merge 3 --squash' 'gh pr review 3 --approve' 'gh api -X PUT repos/o/r/pulls/3/merge' \
+  'gh api -X PUT "repos/o/r/pulls/$PR/merge"' 'gh api repos/{owner}/{repo}/pulls/{pr}/reviews -f event=APPROVE' 'psql -c "DROP TABLE users"' 'echo "truncate table events"' 'migrate --remote'; do
   expect "blocks: $cmd" block-dangerous.sh 2 "BLOCKED" "$(bash_input "$cmd")"
 done
 expect "project reason is shown" block-dangerous.sh 2 "applied by a human" "$(bash_input 'migrate --remote')"
@@ -64,12 +65,15 @@ done
 # ---------- block-dangerous: the merge label is the owner's ----------
 for cmd in \
   'gh pr edit 3 --add-label merge' 'gh issue edit 3 --add-label "risk:low,merge"' 'gh pr edit 3 --add-label=merge' \
-  'gh pr create --fill --label merge' 'gh pr create --fill -l merge' 'gh api repos/o/r/issues/3/labels -f "labels[]=merge"'; do
+  'gh pr create --fill --label merge' 'gh pr create --fill -l merge' 'gh api repos/o/r/issues/3/labels -f "labels[]=merge"' \
+  'gh api -X PATCH repos/o/r/issues/3 -f "labels[]=merge"' "gh api repos/o/r/issues/3/labels -f 'labels[]=risk:low' -F labels[]=merge" \
+  'gh api --method POST "repos/$(.factory/bin/factory repo)/issues/$N/labels" -f labels[]=merge'; do
   expect "blocks: $cmd" block-dangerous.sh 2 "merge label" "$(bash_input "$cmd")"
 done
 for cmd in \
   'gh issue edit 3 --add-label in-progress' 'gh pr list --label merge' 'gh pr edit 3 --add-label merged-docs' \
-  'gh issue edit 3 --add-label blocked --remove-label in-progress'; do
+  'gh issue edit 3 --add-label blocked --remove-label in-progress' 'gh api repos/o/r/issues/3/labels -f "labels[]=blocked"' \
+  'gh api -X DELETE repos/o/r/issues/3/labels/in-progress' 'gh api "repos/o/r/issues?labels=agent-task&state=open"'; do
   expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
 done
 
@@ -153,11 +157,13 @@ as_agent() { jq -cn --arg a "$1" --arg c "$2" '{tool_name: "Bash", agent_type: $
 for cmd in 'gh issue view 12' 'git diff origin/main...HEAD' 'git log --oneline origin/main..HEAD' \
   'cat "$(git rev-parse --git-dir)/factory/pr-body.md"' 'ls src 2>/dev/null' 'grep -rn foo src | head -5' \
   '.factory/bin/factory review show-finding 12 2' '.factory/bin/factory review context 12' \
+  '.factory/bin/factory tickets show 12' \
   'git -C /repo/.factory/worktrees/ticket-12 diff origin/main...HEAD' "$(jq -r .check "$PROJECT/.factory/config.json")"; do
   expect "reviewer may: $cmd" review-guard.sh 0 "" "$(as_agent factory:factory-reviewer "$cmd")"
 done
 for cmd in 'rm src/a.py' 'echo hi > notes.txt' 'git diff > out.patch' 'sed -i s/a/b/ src/a.py' 'find . -name x -delete' \
-  'git commit -am x' 'git checkout -- .' 'ls; touch x' 'cat a | tee b' 'python3 -c "open(\"x\",\"w\")"'; do
+  'git commit -am x' 'git checkout -- .' 'ls; touch x' 'cat a | tee b' 'python3 -c "open(\"x\",\"w\")"' \
+  '.factory/bin/factory tickets create t body.md' '.factory/bin/factory block 12 why'; do
   expect "reviewer may not: $cmd" review-guard.sh 2 "BLOCKED" "$(as_agent factory:factory-reviewer "$cmd")"
 done
 SAVE=$'.factory/bin/factory review save-findings 12 <<\'JSON\'\n{"findings": []}\nJSON'

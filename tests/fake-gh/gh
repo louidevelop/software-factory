@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# gh — a fake GitHub CLI for tests/scripts.test.sh. It serves only `gh api` (REST), from canned
+# replies, and records every call. Everything else fails, the way Claude's cloud proxy fails every
+# GraphQL-backed command (`gh issue`, `gh pr`, `gh repo view`, `gh label`, `gh api graphql`).
+#
+#   $FAKE_GH_DIR/replies/<METHOD> <path>   the reply body; "/" in the path is written as "%".
+#                                          No reply file = 404, with the error body on stdout as gh does.
+#   $FAKE_GH_DIR/calls                     one JSON line per call: {method, path, fields}
+set -u
+D=${FAKE_GH_DIR:?FAKE_GH_DIR is not set}
+
+if [ "${1:-}" != api ]; then
+  echo "fake gh: only \`gh api\` (REST) is served; got: gh $*" >&2
+  exit 1
+fi
+shift
+
+METHOD="" P="" Q="" NF=0
+FIELDS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X | --method)
+      METHOD=$2
+      shift
+      ;;
+    -f | -F | --raw-field | --field)
+      FIELDS+=("$2")
+      NF=$((NF + 1))
+      shift
+      ;;
+    --input)
+      FIELDS+=("input=$(cat "$2")")
+      NF=$((NF + 1))
+      shift
+      ;;
+    -q | --jq)
+      Q=$2
+      shift
+      ;;
+    -H | --header) shift ;;
+    --paginate | --silent | -i | --include) ;;
+    -*)
+      echo "fake gh: unsupported flag $1" >&2
+      exit 1
+      ;;
+    *)
+      [ -z "$P" ] || {
+        echo "fake gh: a second path argument: $1" >&2
+        exit 1
+      }
+      P=${1#/}
+      ;;
+  esac
+  shift
+done
+if [ "$P" = graphql ]; then
+  echo "fake gh: GraphQL is blocked (HTTP 403)" >&2
+  exit 1
+fi
+# gh's own default: GET, or POST once there are fields.
+[ -n "$METHOD" ] || { [ "$NF" -gt 0 ] && METHOD=POST || METHOD=GET; }
+
+jq -cn --arg method "$METHOD" --arg path "$P" '{method: $method, path: $path, fields: $ARGS.positional}' \
+  --args ${FIELDS[@]+"${FIELDS[@]}"} >>"$D/calls"
+
+REPLY_FILE="$D/replies/$METHOD ${P//\//%}"
+if [ ! -f "$REPLY_FILE" ]; then
+  echo '{"message":"Not Found","status":"404"}'
+  echo "gh: Not Found (HTTP 404)" >&2
+  exit 1
+fi
+if [ -n "$Q" ]; then
+  jq -r "$Q" "$REPLY_FILE"
+else
+  cat "$REPLY_FILE"
+fi

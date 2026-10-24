@@ -12,16 +12,17 @@ factory_require_config
 
 MAIN=$(factory_main_root)
 cd "$MAIN" || exit 1
-SLUG=$(factory_repo_slug)
+factory_repo_slug >/dev/null || die "no GitHub repo for $MAIN"
 BASE=$(factory_base_branch)
 TODAY=$(date +%Y-%m-%d)
 git fetch -q origin "$BASE" || die "could not fetch $BASE"
 
-for P in $(gh issue list --label feature --state open --limit 100 --json number -q '.[].number'); do
-  SUBS=$(gh api "repos/$SLUG/issues/$P/sub_issues" -q '[.[] | {number, state, title}]' 2>/dev/null) || continue
+FEATURES=$(factory_api_list "issues?labels=feature&state=open&per_page=100") || die "cannot list feature issues"
+for P in $(jq -r '.[] | select(.pull_request == null) | .number' <<<"$FEATURES"); do
+  SUBS=$(factory_api_list "issues/$P/sub_issues?per_page=100") || continue
   [ "$(jq length <<<"$SUBS")" -gt 0 ] || continue
   [ "$(jq '[.[] | select(.state == "open")] | length' <<<"$SUBS")" -eq 0 ] || continue
-  SPEC=$(gh issue view "$P" --json body -q .body | grep -oE 'docs/specs/[A-Za-z0-9._-]+\.md' | head -1)
+  SPEC=$(jq -r --argjson p "$P" '.[] | select(.number == $p) | .body // ""' <<<"$FEATURES" | grep -oE 'docs/specs/[A-Za-z0-9._-]+\.md' | head -1)
   [ -n "$SPEC" ] || {
     warn "feature #$P has no spec path in its body; skipping"
     continue
@@ -29,7 +30,7 @@ for P in $(gh issue list --label feature --state open --limit 100 --json number 
   git cat-file -e "origin/$BASE:$SPEC" 2>/dev/null || continue # already archived (or never merged)
   NAME=$(basename "$SPEC" .md)
   BRANCH="archive/$NAME"
-  if gh pr list --state open --head "$BRANCH" --json number -q '.[0].number' | grep -q .; then
+  if factory_open_pr "$BRANCH" | grep -q .; then
     continue
   fi
 
@@ -48,13 +49,14 @@ for P in $(gh issue list --label feature --state open --limit 100 --json number 
       { print }
     ' "$DEST" >"$DEST.tmp" && mv "$DEST.tmp" "$DEST"
 
+    # Merged PRs and their bodies (REST has no body search outside the search API).
+    MERGED=$(factory_api_list "pulls?state=closed&per_page=100" | jq -c '[.[] | select(.merged_at) | {number, body: (.body // "")}]')
     {
       printf '\n## As built\n\n'
       printf 'Tickets and the decisions their implementers listed (decisions the spec did not settle):\n\n'
       for k in $(jq -r '.[].number' <<<"$SUBS"); do
         TITLE=$(jq -r --argjson k "$k" '.[] | select(.number == $k) | .title' <<<"$SUBS")
-        PR=$(gh pr list --state merged --search "Closes #$k in:body" --json number,body |
-          jq -c --arg k "$k" '[.[] | select(.body | test("(?i)\\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\\s*:?\\s+#" + $k + "\\b"))][0] // empty')
+        PR=$(jq -c --arg k "$k" '[.[] | select(.body | test("(?i)\\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\\s*:?\\s+#" + $k + "\\b"))][0] // empty' <<<"$MERGED")
         if [ -n "$PR" ]; then
           printf -- '- #%s %s — PR #%s\n' "$k" "$TITLE" "$(jq -r .number <<<"$PR")"
           markdown_section "$(jq -r .body <<<"$PR")" Decisions |
@@ -68,7 +70,7 @@ for P in $(gh issue list --label feature --state open --limit 100 --json number 
     git add -A
     git commit -qm "Archive spec $NAME" -m "All tickets of #$P are closed."
     git push -q -u origin "$BRANCH"
-    gh pr create --base "$BASE" --head "$BRANCH" --title "Archive spec $NAME" --body "Closes #$P
+    factory_pr_create "$BASE" "$BRANCH" "Archive spec $NAME" "Closes #$P
 
 Every ticket of this feature is closed. This moves \`$SPEC\` to \`docs/specs/archive/\`, marks it as
 history, and appends what was actually built (each ticket's PR and the decisions its implementer

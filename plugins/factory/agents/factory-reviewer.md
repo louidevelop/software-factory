@@ -16,7 +16,8 @@ You start in the project folder, but the ticket's work lives in its own worktree
 `.factory/bin/factory review context <n>` — it prints the worktree path `<wt>`, branch, base, head,
 the check command and the PR description path. Run git as `git -C <wt> …` and read files under `<wt>/`.
 
-1. The ticket: `gh issue view <n>` — Goal, acceptance criteria, Scope, Decisions, Out of scope.
+1. The ticket with its comments: `.factory/bin/factory tickets show <n>` — Goal, acceptance criteria,
+   Scope, Decisions, Out of scope, and the owner's answers in the comments.
 2. The spec it links, if any (`<wt>/docs/specs/`; `docs/specs/archive/` is history — ignore it).
 3. `<wt>/AGENTS.md` — the project's rules.
 4. The change: `git -C <wt> log --oneline <base>..HEAD` and `git -C <wt> diff <base>...HEAD`, then

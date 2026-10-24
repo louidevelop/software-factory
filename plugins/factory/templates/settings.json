@@ -13,7 +13,7 @@
   "permissions": {
     "allow": [
       "Bash(.factory/bin/factory review *)",
-      "Bash(gh issue view *)",
+      "Bash(.factory/bin/factory tickets show *)",
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)"

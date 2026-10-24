@@ -81,7 +81,8 @@ fi
 
 # ---------- Merging is the gate's job ----------
 # An agent never merges, approves, or bypasses the factory gate, whoever it is logged in as.
-if matches '(^|[ ;&|(])gh +pr +(merge|review)\b|gh +api\b.*/pulls/[0-9]+/(merge|reviews)\b'; then
+# The PR may be any token: 3, $N, {pr}.
+if matches '(^|[ ;&|(])gh +pr +(merge|review)\b|gh +api\b.*/pulls/[^/ ]+/(merge|reviews)\b'; then
   block "merging or reviewing a PR. The factory gate merges; the owner gives the go-ahead."
 fi
 # Cloud sessions reach GitHub through a proxy with its own `ccr` REST routes. Auto-merge merges
@@ -92,8 +93,9 @@ if matches_i '(^|[ ;&|(])(gh +api|curl|wget)\b[^;&|]*/pulls/[^/ ]+/ccr/(auto_mer
 fi
 # The `merge` label is the owner's go-ahead for a high-impact PR, and agents act as the owner's
 # account, so the gate cannot tell who added it: only this keeps an agent from adding it.
+# REST sets labels through …/labels and through a `labels[]=` field on an issue or PR.
 if matches 'gh +(pr|issue) +(edit|create)\b[^;&|]*(--add-label|--label|-l)( +|=)["'"'"']?([^ "'"'"']*,)?merge(["'"'"', ]|$)' ||
-  matches 'gh +api\b[^;&|]*/labels\b[^;&|]*\bmerge\b'; then
+  matches 'gh +api\b[^;&|]*\blabels\b[^;&|]*\bmerge\b'; then
   block "adding the merge label. Only the owner gives a high-impact PR the go-ahead."
 fi
 

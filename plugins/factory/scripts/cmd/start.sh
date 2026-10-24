@@ -56,18 +56,19 @@ else
   N=$WHICH
 fi
 T=$(ticket_json "$N") || die "cannot read issue #$N"
-[ "$(jq -r .state <<<"$T")" = OPEN ] || die "#$N is not open"
+[ "$(jq -r .state <<<"$T")" = open ] || die "#$N is not open"
+[ "$(jq -r '.pull_request // empty' <<<"$T")" = "" ] || die "#$N is a pull request, not a ticket"
 LABELS=$(jq -r '.labels[].name' <<<"$T")
 grep -qx agent-task <<<"$LABELS" || die "#$N is not labelled agent-task"
 grep -qx blocked <<<"$LABELS" && die "#$N is blocked; a human answers the question first"
 grep -qx in-progress <<<"$LABELS" && die "#$N is already in progress (the label is the lock)"
-OPEN_BLOCKERS=$(gh api "repos/$SLUG/issues/$N/dependencies/blocked_by" -q '[.[] | select(.state == "open") | "#\(.number)"] | join(", ")' 2>/dev/null)
-[ -z "$OPEN_BLOCKERS" ] || die "#$N waits for $OPEN_BLOCKERS to merge"
+OPEN_BLOCKERS=$(factory_open_blockers "$N") || die "cannot read #$N's blockers"
+[ -z "$OPEN_BLOCKERS" ] || die "#$N waits for #${OPEN_BLOCKERS// /, #} to merge"
 TITLE=$(jq -r .title <<<"$T")
-BODY=$(jq -r .body <<<"$T")
+BODY=$(jq -r '.body // ""' <<<"$T")
 
 # 4. Lock.
-gh issue edit "$N" --add-label in-progress >/dev/null || die "could not label #$N in-progress"
+factory_label_add "$N" in-progress || die "could not label #$N in-progress"
 say "#$N locked: $TITLE"
 
 # 5. Prerequisites: unticked boxes block. The human ticks them; secrets are never inspected.
@@ -106,7 +107,7 @@ else
   if [ -n "$SETUP" ]; then
     say "setup: $SETUP"
     (cd "$WT" && bash -c "$SETUP") || {
-      gh issue edit "$N" --remove-label in-progress >/dev/null
+      factory_label_remove "$N" in-progress
       die "setup failed in $WT"
     }
   fi
@@ -117,7 +118,7 @@ fi
 CHECK=$(jq -r .check "$CONFIG")
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; then
   if ! (cd "$WT" && bash -c "$CHECK" >/dev/null 2>&1); then
-    gh issue edit "$N" --remove-label in-progress >/dev/null
+    factory_label_remove "$N" in-progress
     warn "\`$CHECK\` is red on a fresh $BASE. No ticket starts until $BASE is fixed."
     exit 4
   fi
@@ -132,7 +133,7 @@ if [ ! -f "$STATE/pr-body.md" ]; then
   sed "s/^Closes #<!-- ticket number -->/Closes #$N/" "$FACTORY_PLUGIN/templates/github/pull_request_template.md" >"$STATE/pr-body.md"
 fi
 SPEC=$(grep -oE 'docs/specs/[A-Za-z0-9._/-]+\.md' <<<"$BODY" | head -1)
-say "ready: $(jq -r .url <<<"$T")"
+say "ready: $(jq -r .html_url <<<"$T")"
 [ -n "$SPEC" ] && say "spec: $SPEC"
 say "branch $BRANCH in $WT"
 say "next: cd $WT, implement, fill in $STATE/pr-body.md, commit, then: factory review begin $N"

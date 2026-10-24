@@ -34,7 +34,7 @@ fill() { # fill <template> key=value... — replaces {{KEY}} with value
   printf '%s' "$out"
 }
 
-is_blocked() { gh issue view "$1" --json labels -q '.labels[].name' | grep -qx blocked; }
+is_blocked() { ticket_has_label "$1" blocked; }
 
 describe_state() { # what the previous attempt left behind, for the next fresh session
   local base=$1 state=$2 msgs=()

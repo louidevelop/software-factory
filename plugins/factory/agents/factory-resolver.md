@@ -13,7 +13,7 @@ hook enforces this); you may not edit anything.
 2. Where the work lives: `.factory/bin/factory review context <n>` prints the worktree `<wt>` and the
    check command. Run git as `git -C <wt> …` and read files under `<wt>/`.
 3. What changed since: `git -C <wt> diff <reviewed commit>..HEAD`, and the code where the finding
-   pointed. The ticket: `gh issue view <n>`. You may run the check command from `<wt>`.
+   pointed. The ticket: `.factory/bin/factory tickets show <n>`. You may run the check command from `<wt>`.
 
 Decide only: is THIS finding resolved at HEAD? Resolved means the evidence in the finding no longer
 holds and nothing in the fix contradicts the ticket. Do not review anything else; raise nothing new.

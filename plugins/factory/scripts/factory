@@ -15,14 +15,15 @@ usage: factory <command> [args]
                          labels, merge settings, branch protection (shows changes first)
   sync [--apply | --pr]  compare factory-managed files with the latest factory;
                          --apply writes them, --pr opens a "factory sync" PR
-  tickets feature|create|next|list
-                         GitHub plumbing for specs and tickets (sub-issues, blocked-by)
+  tickets feature|create|next|list|show
+                         GitHub plumbing for specs and tickets (sub-issues, blocked-by); show: a ticket + comments
   start [<issue> | next] pick up a ticket: lock, preflight, prerequisites, drift, worktree
   review begin <issue> | judges | assemble [--resolve] | resolve-begin
                          local review through the reviewer/judge/resolver subagents
   open-pr <issue>        push the branch and open the PR with the review attached
   run [<parent-issue>]   unattended loop: start → implement → review → fix → open-pr, repeat
   block <issue> <reason> label a ticket blocked and comment the reason
+  repo                   owner/repo from the git remote, for `gh api repos/$(factory repo)/…`
   archive-specs          open an "Archive spec" PR for every feature whose tickets are all closed
 USAGE
 }
@@ -32,6 +33,12 @@ shift || true
 case "$cmd" in
   doctor | github-setup | sync | tickets | start | review | open-pr | run | block | archive-specs)
     exec bash "$FACTORY_SCRIPTS/cmd/$cmd.sh" "$@"
+    ;;
+  repo)
+    # shellcheck source=common.sh
+    . "$FACTORY_SCRIPTS/common.sh"
+    factory_repo_slug || die "no GitHub remote for $(pwd)"
+    echo
     ;;
   help | -h | --help) usage ;;
   *)

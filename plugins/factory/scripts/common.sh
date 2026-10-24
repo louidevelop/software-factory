@@ -15,8 +15,55 @@ factory_main_root() {
   git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}'
 }
 
+# GitHub --------------------------------------------------------------------
+# Every GitHub call goes through REST (`gh api`). Claude's cloud sessions reach GitHub through a
+# proxy that answers every GraphQL call with 403, and `gh issue`, `gh pr`, `gh repo view` and
+# `gh label` all use GraphQL.
+
+# owner/repo, read from the origin remote (no API call): git@github.com:o/r.git,
+# https://github.com/o/r(.git), and the cloud proxy's http://…/git/o/r all end in o/r.
 factory_repo_slug() {
-  gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null
+  local url slug
+  url=$(git remote get-url origin 2>/dev/null) || url=$(git remote get-url "$(git remote | head -n1)" 2>/dev/null) || return 1
+  url=${url%/}
+  url=${url%.git}
+  slug=$(sed -E 's#^.*[:/]([^/:]+/[^/:]+)$#\1#' <<<"$url")
+  [[ $slug =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 1
+  printf '%s' "$slug"
+}
+
+# factory_api <path under repos/owner/repo/> [gh api args...]
+factory_api() {
+  local slug
+  slug=$(factory_repo_slug) || {
+    echo "factory: no GitHub remote for $(pwd)" >&2
+    return 1
+  }
+  gh api "repos/$slug/$1" "${@:2}"
+}
+
+# A paginated list endpoint as one JSON array (each page is its own array on stdout).
+factory_api_list() {
+  local out
+  out=$(factory_api "$@" --paginate) || return 1
+  jq -s 'add // []' <<<"$out"
+}
+
+factory_label_add() { factory_api "issues/$1/labels" -f "labels[]=$2" >/dev/null; }
+# Removing a label the issue does not have is a 404; that is fine.
+factory_label_remove() { factory_api "issues/$1/labels/$2" -X DELETE >/dev/null 2>&1 || true; }
+factory_comment() { factory_api "issues/$1/comments" -f body="$2" >/dev/null; }
+
+# factory_pr_create <base> <head> <title> <body> — prints the PR's URL.
+factory_pr_create() {
+  factory_api pulls -f base="$1" -f head="$2" -f title="$3" -f body="$4" -q .html_url
+}
+
+# The open PR whose head is <branch> in this repo, if any.
+factory_open_pr() {
+  local slug
+  slug=$(factory_repo_slug) || return 1
+  factory_api "pulls?state=open&head=${slug%%/*}:$1" -q '.[0].number // empty'
 }
 
 factory_base_branch() {
@@ -56,12 +103,28 @@ factory_ticket_worktree() {
   '
 }
 
+# The issue as REST returns it, with `.comments` replaced by the comments themselves: the owner
+# answers a blocked ticket's question in a comment, so a ticket read without them is incomplete.
 ticket_json() {
-  gh issue view "$1" --json number,title,body,state,labels,url
+  local issue comments
+  issue=$(factory_api "issues/$1") || return 1
+  comments=$(factory_api_list "issues/$1/comments?per_page=100") || return 1
+  jq -n --argjson i "$issue" --argjson c "$comments" \
+    '$i + {comments: [$c[] | {author: .user.login, created_at, body}]}'
 }
 
 ticket_has_label() {
-  gh issue view "$1" --json labels -q '.labels[].name' | grep -qx "$2"
+  local labels
+  labels=$(factory_api "issues/$1" -q '.labels[].name') || return 1
+  grep -qx "$2" <<<"$labels"
+}
+
+# The ticket's open blockers ("blocked by" dependencies), space-separated. Fails when they cannot
+# be read, and callers treat that as not ready: a ticket never starts past an unknown blocker.
+factory_open_blockers() {
+  local deps
+  deps=$(factory_api_list "issues/$1/dependencies/blocked_by?per_page=100") || return 1
+  jq -r '[.[] | select(.state == "open") | .number] | join(" ")' <<<"$deps"
 }
 
 # The body section under "## <name>" up to the next "## " heading.
@@ -78,9 +141,10 @@ ticket_slug() {
 }
 
 factory_block_ticket() {
-  local n=$1 reason=$2
-  gh issue edit "$n" --add-label blocked --remove-label in-progress >/dev/null 2>&1 ||
-    gh issue edit "$n" --add-label blocked >/dev/null
-  gh issue comment "$n" --body "**Blocked** (factory): $reason" >/dev/null
-  warn "#$n blocked: $reason"
+  local n=$1 reason=$2 rc=0
+  factory_label_add "$n" blocked || rc=1
+  factory_label_remove "$n" in-progress
+  factory_comment "$n" "**Blocked** (factory): $reason" || rc=1
+  if [ "$rc" -eq 0 ]; then warn "#$n blocked: $reason"; else warn "could not block #$n on GitHub (reason: $reason)"; fi
+  return "$rc"
 }

@@ -13,7 +13,7 @@ while IFS= read -r f; do
 done < <(git ls-files --cached --others --exclude-standard '*.json')
 
 step "shell scripts parse"
-SHELL_FILES=$(git ls-files --cached --others --exclude-standard '*.sh' 'plugins/factory/scripts/factory')
+SHELL_FILES=$(git ls-files --cached --others --exclude-standard '*.sh' 'plugins/factory/scripts/factory' 'tests/fake-gh/gh')
 for f in $SHELL_FILES; do
   bash -n "$f" || fail "syntax: $f"
   [ -x "$f" ] || fail "not executable: $f"
