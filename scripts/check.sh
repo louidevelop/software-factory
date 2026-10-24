@@ -35,6 +35,9 @@ bash tests/hooks.test.sh || fail "hook tests"
 step "script tests"
 bash tests/scripts.test.sh || fail "script tests"
 
+step "review tests (fake claude)"
+bash tests/review.test.sh || fail "review tests"
+
 if [ -d classifier ]; then
   step "classifier tests"
   node --test classifier/*.test.mjs || fail "classifier tests"
