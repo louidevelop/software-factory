@@ -1,8 +1,8 @@
 # Software factory — rules for agents working on this repo
 
 This repo is the factory itself: a Claude Code plugin marketplace (`plugins/factory/`), a
-reusable GitHub workflow + classifier action, and the docs that decided their shape
-(`docs/factory-decisions.md` is binding; read it before changing behaviour).
+reusable GitHub workflow + classifier action. The code is the source of truth: the reason for a
+non-obvious choice goes in a comment next to the code it governs.
 
 `CLAUDE.md` is a one-line `@AGENTS.md` import. Put rules here, never there.
 

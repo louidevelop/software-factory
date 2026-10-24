@@ -18,7 +18,7 @@ BASE=$(factory_base_branch)
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 case "$BRANCH" in ticket/"$N"-*) ;; *) die "branch $BRANCH is not ticket #$N's branch" ;; esac
 
-# Done criteria (decisions, step 4).
+# Done criteria.
 [ -z "$(git status --porcelain)" ] || die "the tree is not clean; commit or discard first"
 [ "$(git rev-list --count "origin/$BASE..HEAD")" -gt 0 ] || die "no commits on $BRANCH"
 CHECK=$(factory_cfg '.check')

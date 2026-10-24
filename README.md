@@ -24,7 +24,6 @@ Tech-general: the factory defines a contract each project fills with its own sta
 | `plugins/factory/templates/` | config, `AGENTS.md` + managed block, settings, spec, ticket, PR, gate workflow, shim |
 | `classifier/` | the gate: impact rules, owner-approval gate, GitHub Action (`uses: louidevelop/software-factory/classifier@main`) |
 | `examples/` | outfit-assistant and byggtalk as worked examples of the contract |
-| `docs/` | the current-state map, the decision log (binding), the build plan |
 
 ## Using it in a project
 
