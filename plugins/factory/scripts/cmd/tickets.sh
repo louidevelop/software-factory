@@ -60,7 +60,8 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
       gh api -X POST "$R/issues/$PARENT/sub_issues" -F sub_issue_id="$(issue_id "$N")" >/dev/null ||
         warn "#$N created but not linked under #$PARENT"
     fi
-    for b in "${BLOCKERS[@]}"; do
+    # bash 3.2 (macOS) treats an empty array as unset under `set -u`, hence the +"…" form.
+    for b in ${BLOCKERS[@]+"${BLOCKERS[@]}"}; do
       gh api -X POST "$R/issues/$N/dependencies/blocked_by" -F issue_id="$(issue_id "$b")" >/dev/null ||
         warn "#$N created but 'blocked by #$b' was not recorded"
     done
