@@ -30,28 +30,30 @@ else
 fi
 [ -f "$ROOT/AGENTS.md" ] && grep -q '^<!-- factory:begin' "$ROOT/AGENTS.md" && ok "AGENTS.md has the factory block" || bad "AGENTS.md has no factory block (factory sync --apply)"
 [ "$(cat "$ROOT/CLAUDE.md" 2>/dev/null)" = "@AGENTS.md" ] && ok "CLAUDE.md imports AGENTS.md" || note "CLAUDE.md is not exactly '@AGENTS.md'"
-# The factory loads one of two ways: the thin layer (.claude/settings.json runs .factory/bin/fetch
-# and .factory/bin/hook) or, until a project has synced, the Claude Code plugin. The plugin's
-# enabled state is the most specific settings file that sets it: user, then project, then local.
-PLUGIN=false
+# The factory loads through the thin layer: .claude/settings.json runs .factory/bin/fetch at session
+# start and every factory hook through .factory/bin/hook.
+if jq -e '[.hooks[]?[]?.hooks[]?.command] | any(test("\\.factory/bin/fetch")) and any(test("\\.factory/bin/hook "))' \
+  "$ROOT/.claude/settings.json" >/dev/null 2>&1 && [ -x "$ROOT/.factory/bin/fetch" ] && [ -x "$ROOT/.factory/bin/hook" ]; then
+  ok "the factory loads through .factory/bin (thin layer)"
+else
+  bad "the factory is not loaded: .claude/settings.json has no factory hooks (factory sync --apply)"
+fi
+# The factory used to be a Claude Code plugin, now retired. One still enabled runs every factory hook
+# a second time, from its own stale copy; one only installed, or its marketplace, is clutter that
+# no longer updates. Enabled is the most specific settings file that sets it: user, project, local.
+PLUGIN=""
 for f in "$HOME/.claude/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json"; do
   # select, not `// empty`: `//` would treat an explicit false as unset.
   v=$(jq -r '.enabledPlugins["factory@software-factory"] | select(. != null)' "$f" 2>/dev/null)
   [ -n "$v" ] && PLUGIN=$v
 done
-THIN=false
-jq -e '[.hooks[]?[]?.hooks[]?.command] | any(test("\\.factory/bin/fetch")) and any(test("\\.factory/bin/hook "))' \
-  "$ROOT/.claude/settings.json" >/dev/null 2>&1 && [ -x "$ROOT/.factory/bin/fetch" ] && [ -x "$ROOT/.factory/bin/hook" ] && THIN=true
-if [ "$THIN" = true ] && [ "$PLUGIN" = true ]; then
-  ok "the factory loads through .factory/bin (thin layer)"
-  note "the factory plugin is enabled too, so every factory hook runs twice: disable factory@software-factory (/plugin) for this project"
-elif [ "$THIN" = true ]; then
-  ok "the factory loads through .factory/bin (thin layer)"
-elif [ "$PLUGIN" = true ]; then
-  ok "the factory plugin is enabled"
-  note "this project still loads the factory as a plugin; factory sync --pr moves it to the thin layer"
-else
-  bad "the factory is not loaded: .claude/settings.json has no factory hooks (factory sync --apply)"
+REMOVE="claude plugin uninstall factory@software-factory; claude plugin marketplace remove software-factory"
+if [ "$PLUGIN" = true ]; then
+  note "the retired factory plugin is still enabled, so every factory hook runs twice. Remove it: $REMOVE"
+elif jq -e --arg root "$ROOT" '.plugins["factory@software-factory"] // [] | any(.scope == "user" or .projectPath == $root)' \
+  "$HOME/.claude/plugins/installed_plugins.json" >/dev/null 2>&1 ||
+  jq -e 'has("software-factory")' "$HOME/.claude/plugins/known_marketplaces.json" >/dev/null 2>&1; then
+  note "the retired factory plugin or its marketplace is still installed. Remove it: $REMOVE"
 fi
 CHECK_YML="$ROOT/.github/workflows/check.yml"
 if [ ! -f "$CHECK_YML" ]; then
@@ -91,7 +93,7 @@ if [ -n "$ME" ]; then
   if [ -n "$SLUG" ]; then
     ok "repo $SLUG"
     LABELS=$(cd "$ROOT" && factory_api_list "labels?per_page=100" 2>/dev/null | jq -r '.[].name')
-    for l in agent-task in-progress blocked risk:low risk:high merge; do
+    for l in "${FACTORY_LABELS[@]%%|*}"; do
       grep -qx "$l" <<<"$LABELS" && ok "label $l" || bad "label $l missing (factory github-setup --apply)"
     done
   else

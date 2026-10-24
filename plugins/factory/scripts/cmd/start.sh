@@ -39,24 +39,17 @@ BASE=$(factory_base_branch)
 SLUG=$(factory_repo_slug)
 [ -n "$SLUG" ] || die "no GitHub repo for $MAIN"
 
-# 1. Latest factory. Each new session follows factory main; the running session keeps the
-#    plugin it started with. Skipped when developing the factory itself (FACTORY_HOME).
-#    No plugin in place (cloud runs load the factory through the thin layer).
-if [ -z "${FACTORY_HOME:-}" ] && [ "$IN_PLACE" -eq 0 ] && command -v claude >/dev/null 2>&1; then
-  say "updating the factory plugin"
-  claude plugin marketplace update software-factory >/dev/null 2>&1 || warn "could not update the software-factory marketplace"
-  claude plugin update factory@software-factory >/dev/null 2>&1 || warn "could not update factory@software-factory"
-fi
-
-# 2. Factory-managed files behind? Open (or keep) a sync PR; the ticket continues meanwhile.
+# 1. Factory-managed files behind? Open (or keep) a sync PR; the ticket continues meanwhile.
+#    The factory itself needs no update here: every session start fetches factory main
+#    (.factory/bin/fetch), and this runs from that copy.
 if ! bash "$FACTORY_SCRIPTS/cmd/sync.sh" >/dev/null 2>&1; then
   bash "$FACTORY_SCRIPTS/cmd/sync.sh" --pr || warn "could not open the factory sync PR"
 fi
 
-# 2b. Features whose tickets are all closed get their "Archive spec" PR.
+# 1b. Features whose tickets are all closed get their "Archive spec" PR.
 bash "$FACTORY_SCRIPTS/cmd/archive-specs.sh" || warn "could not check for finished specs"
 
-# 3. Pick the ticket.
+# 2. Pick the ticket.
 if [ "$WHICH" = next ]; then
   N=$(bash "$FACTORY_SCRIPTS/cmd/tickets.sh" next ${PARENT:+"$PARENT"}) || {
     say "no ticket is ready: every open agent-task is in progress, blocked, or waiting on a blocker"
@@ -79,7 +72,7 @@ OPEN_BLOCKERS=$(factory_open_blockers "$N") || die "cannot read #$N's blockers"
 TITLE=$(jq -r .title <<<"$T")
 BODY=$(jq -r '.body // ""' <<<"$T")
 
-# 4. Lock.
+# 3. Lock.
 if grep -qx in-progress <<<"$LABELS"; then
   FRESH=0
   say "#$N resumed: $TITLE"
@@ -91,7 +84,7 @@ fi
 # unlock — a failed pickup releases only a lock it took itself.
 unlock() { [ "$FRESH" -eq 0 ] || factory_label_remove "$N" in-progress; }
 
-# 5. Prerequisites: unticked boxes block. The human ticks them; secrets are never inspected.
+# 4. Prerequisites: unticked boxes block. The human ticks them; secrets are never inspected.
 #    A resumed ticket passed them when it was first picked up.
 UNTICKED=$(markdown_section "$BODY" Prerequisites | grep -E '^\s*[-*] \[ \]' | sed -E 's/^\s*[-*] \[ \] *//' | grep -vE '^(…|\.\.\.)?$' || true)
 if [ "$RESUME" -eq 0 ] && [ -n "$UNTICKED" ]; then
@@ -99,7 +92,7 @@ if [ "$RESUME" -eq 0 ] && [ -n "$UNTICKED" ]; then
   exit 5
 fi
 
-# 6. The branch: the ticket's existing one (this clone's, else origin's, where an earlier attempt
+# 5. The branch: the ticket's existing one (this clone's, else origin's, where an earlier attempt
 #    pushed its work), or a fresh one from the base.
 git fetch -q origin "$BASE" || die "could not fetch $BASE"
 BRANCH=$(git for-each-ref --format='%(refname:short)' "refs/heads/ticket/$N-*" | head -1)
@@ -183,7 +176,7 @@ else
   fi
 fi
 
-# 7. The base must be green before the ticket starts; a red base is not the ticket's fault.
+# 6. The base must be green before the ticket starts; a red base is not the ticket's fault.
 #    Only checked on a fresh branch: a reused worktree already carries the ticket's own work.
 CHECK=$(jq -r .check "$CONFIG")
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; then
@@ -194,7 +187,7 @@ if [ "$(git -C "$WT" rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; the
   fi
 fi
 
-# 8. Run state for the later steps (never committed: it lives in the git dir). A clone works on
+# 7. Run state for the later steps (never committed: it lives in the git dir). A clone works on
 #    one ticket after another in place, so another ticket's leftovers go first.
 STATE=$(cd "$WT" && factory_state_dir)
 if [ "$(cat "$STATE/ticket" 2>/dev/null)" != "$N" ]; then
@@ -204,7 +197,7 @@ printf '%s\n' "$N" >"$STATE/ticket"
 # A PR description draft to fill in, from the factory's template (the project may not have its
 # own copy yet, e.g. while a factory sync PR is open).
 if [ ! -f "$STATE/pr-body.md" ]; then
-  sed "s/^Closes #<!-- ticket number -->/Closes #$N/" "$FACTORY_PLUGIN/templates/github/pull_request_template.md" >"$STATE/pr-body.md"
+  sed "s/^Closes #<!-- ticket number -->/Closes #$N/" "$FACTORY_DIR/templates/github/pull_request_template.md" >"$STATE/pr-body.md"
 fi
 SPEC=$(grep -oE 'docs/specs/[A-Za-z0-9._/-]+\.md' <<<"$BODY" | head -1)
 say "ready: $(jq -r .html_url <<<"$T")"

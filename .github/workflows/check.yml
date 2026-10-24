@@ -14,6 +14,5 @@ jobs:
         with:
           node-version: 24
       # Identical to the local command. If they ever disagree, fixing that is priority one.
-      # shellcheck and jq ship with ubuntu-latest; the claude CLI does not, so manifest
-      # validation runs locally only.
+      # shellcheck and jq ship with ubuntu-latest.
       - run: scripts/check.sh

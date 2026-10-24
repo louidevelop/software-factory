@@ -57,24 +57,23 @@ if [ -f scripts/validate-config.mjs ]; then
   done
 fi
 
-step "plugin manifests"
-if command -v claude >/dev/null 2>&1; then
-  # Strict apart from the deliberate missing plugin version (see below).
-  strict_except_version() {
-    claude plugin validate --json "$1" 2>/dev/null | jq -e '.success
-      and ([.manifest.errors[]?, (.contents[]?.errors[]?)] | length == 0)
-      and ([.manifest.warnings[]?, (.contents[]?.warnings[]?) | select(.path | test("(^|→ )version$") | not)] | length == 0)' >/dev/null
-  }
-  strict_except_version . || fail "marketplace manifest (claude plugin validate --json .)"
-  # Strict, except the one warning we want: the plugin has NO version on purpose, so Claude Code
-  # versions it by git commit and `claude plugin update` always moves projects to factory main.
-  # A fixed semver would freeze every project on that version until someone bumps it.
-  strict_except_version plugins/factory || fail "plugin (claude plugin validate --json plugins/factory)"
-  jq -e '.version == null' plugins/factory/.claude-plugin/plugin.json >/dev/null ||
-    fail "plugins/factory/.claude-plugin/plugin.json must not pin a version (projects follow main)"
-else
-  echo "claude CLI not installed; skipping manifest validation"
-fi
+step "thin layer sources"
+# What a project's thin layer points at must exist in the runtime: each hook its settings.json runs
+# through .factory/bin/hook, and the frontmatter sync copies into each agent and skill stub (Claude
+# Code reads that before anything runs: an agent's name and tools, a skill's description).
+F=plugins/factory
+while IFS= read -r h; do
+  [ -f "$F/hooks/$h.sh" ] || fail "settings-hooks.json runs hook '$h', but $F/hooks/$h.sh does not exist"
+done < <(jq -r '.hooks[][].hooks[].command | capture("\\.factory/bin/hook (?<n>[a-z-]+)").n' "$F/templates/settings-hooks.json")
+frontmatter() { awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { exit } fm { print }' "$1"; }
+for f in "$F"/agents/*.md "$F"/skills/*/SKILL.md; do
+  name=$(basename "$f" .md)
+  [ "$name" = SKILL ] && name=$(basename "$(dirname "$f")")
+  fm=$(frontmatter "$f")
+  grep -qx "name: $name" <<<"$fm" || fail "$f: frontmatter needs 'name: $name'"
+  grep -q '^description: .' <<<"$fm" || fail "$f: frontmatter needs a description"
+  case "$f" in "$F"/agents/*) grep -q '^tools: .' <<<"$fm" || fail "$f: frontmatter needs tools (review agents stay read-only)" ;; esac
+done
 
 [ "$FAIL" -eq 0 ] && echo "check: green" || echo "check: RED"
 exit "$FAIL"

@@ -203,7 +203,11 @@ git remote add origin git@github.com:o/r.git
 echo '@AGENTS.md' >CLAUDE.md
 mkdir -p .github/workflows && printf 'on:\n  workflow_dispatch:\n' >.github/workflows/check.yml
 reply GET user '{"login": "o"}'
-reply GET "repos/o/r/labels?per_page=100" "$(label agent-task in-progress blocked risk:low risk:high merge)"
+# Every label github-setup creates, read from its own dry run: doctor checks the same list.
+SETUP_LABELS=$(cd "$N" && "$FACTORY" github-setup 2>/dev/null | sed -n 's/^  labels: //p')
+[[ " $SETUP_LABELS " == *" rework "* ]] && ok || no "github-setup lists the rework label: $SETUP_LABELS"
+# shellcheck disable=SC2086 # one label per word
+reply GET "repos/o/r/labels?per_page=100" "$(label $SETUP_LABELS)"
 # doctor [env...] — output in $W/out, exit code echoed.
 doctor() {
   env HOME="$W/home" PATH="$W/bin:$PATH" CLAUDE_PROJECT_DIR="$N" FACTORY_SOURCE="$SRC" "$@" .factory/bin/factory doctor >"$W/out" 2>&1
@@ -211,6 +215,12 @@ doctor() {
 }
 [ "$(doctor)" = 0 ] && ok || no "doctor: a local-only project is ready without the routine: $(cat "$W/out")"
 grep -q 'factory runtime: main at' "$W/out" && ok || no "doctor fetches the runtime"
+for l in $SETUP_LABELS; do grep -q "✓.* label $l$" "$W/out" && ok || no "doctor checks the label $l"; done
+# shellcheck disable=SC2046,SC2086 # one label per word
+reply GET "repos/o/r/labels?per_page=100" "$(label $(tr ' ' '\n' <<<"$SETUP_LABELS" | grep -vx rework))"
+[ "$(doctor)" = 1 ] && grep -q 'label rework missing' "$W/out" && ok || no "doctor fails on a missing rework label"
+# shellcheck disable=SC2086
+reply GET "repos/o/r/labels?per_page=100" "$(label $SETUP_LABELS)"
 grep -q 'factory-managed files are current' "$W/out" && ok || no "doctor reports the thin layer current"
 grep -q 'no variable FACTORY_ROUTINE_URL' "$W/out" && grep -q 'no secret FACTORY_ROUTINE_TOKEN' "$W/out" && grep -q 'local only' "$W/out" &&
   ok || no "doctor notes the missing cloud variable and secret"
@@ -232,6 +242,42 @@ grep -q 'behind: .factory/bin/hook' "$W/out" && ok || no "doctor names the thin-
 rm -rf .git/factory-runtime
 env HOME="$W/home" PATH="$W/bin:$PATH" CLAUDE_PROJECT_DIR="$N" FACTORY_SOURCE="$W/nowhere" "$FACTORY" doctor >"$W/out" 2>&1
 [ $? -eq 1 ] && grep -q 'does not fetch' "$W/out" && ok || no "doctor fails when the runtime cannot be fetched"
+
+# ---------- sync --pr: origin refuses the push ----------
+# A bare origin whose path ends in o/r (so the slug reads as on GitHub), refusing every push the way
+# GitHub refused one for email privacy.
+ORIGIN="$W/remote/o/r.git"
+git init -q --bare -b main "$ORIGIN"
+SP="$W/sync-pr"
+git clone -q "$ORIGIN" "$SP" 2>/dev/null
+cd "$SP" || exit 1
+mkdir -p .factory
+echo '{"version":1,"owners":["o"],"check":"true"}' >.factory/config.json
+G add -A && G commit -qm init && G push -q origin main
+printf '#!/bin/sh\necho "refused: push would publish a private email address" >&2\nexit 1\n' >"$ORIGIN/hooks/pre-receive"
+chmod +x "$ORIGIN/hooks/pre-receive"
+reply GET "repos/o/r/pulls?state=open&per_page=100" '[]'
+reply POST repos/o/r/pulls '{"number": 7, "html_url": "https://github.com/o/r/pull/7"}'
+# sync_pr — runs `factory sync --pr` here; output in $W/out, exit code echoed.
+sync_pr() {
+  env CLAUDE_PROJECT_DIR="$SP" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t \
+    GIT_COMMITTER_EMAIL=t@example.com "$FACTORY" sync --pr >"$W/out" 2>&1
+  echo $?
+}
+fresh_calls
+[ "$(sync_pr)" = 1 ] && ok || no "sync --pr fails when the push is refused: $(cat "$W/out")"
+grep -q 'could not push factory-sync-.* so no sync PR was opened' "$W/out" && ok || no "sync --pr says the push was refused"
+grep -q 'private email' "$W/out" && ok || no "sync --pr shows git's reason"
+called POST repos/o/r/pulls && no "sync --pr opens no PR after a refused push" || ok
+[ -z "$(git branch --list 'factory-sync*')" ] && ok || no "sync --pr deletes its unpushed branch"
+[ "$(git worktree list | wc -l)" -eq 1 ] && ok || no "sync --pr removes its worktree: $(git worktree list)"
+[ -z "$(git status --porcelain)" ] && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] && ok || no "sync --pr leaves the checkout as it was"
+rm "$ORIGIN/hooks/pre-receive"
+fresh_calls
+[ "$(sync_pr)" = 0 ] && ok || no "sync --pr succeeds once origin takes the push: $(cat "$W/out")"
+called POST repos/o/r/pulls && ok || no "sync --pr opens the PR"
+git -C "$ORIGIN" rev-parse -q --verify "$(git branch --list 'factory-sync*' --format='%(refname:short)')" >/dev/null && ok || no "the pushed branch is on origin"
+[ "$(git worktree list | wc -l)" -eq 1 ] && ok || no "sync --pr removes its worktree after the PR"
 
 echo "scripts: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

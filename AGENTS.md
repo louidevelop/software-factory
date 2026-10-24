@@ -1,8 +1,10 @@
 # Software factory — rules for agents working on this repo
 
-This repo is the factory itself: a Claude Code plugin marketplace (`plugins/factory/`), a
-reusable GitHub workflow + classifier action. The code is the source of truth: the reason for a
-non-obvious choice goes in a comment next to the code it governs.
+This repo is the factory itself: the runtime every project session fetches from `main`
+(`plugins/factory/`: scripts, hooks, prompts, agent and skill instructions, templates), the thin
+layer `factory sync` commits in each project (`plugins/factory/templates/bin/`), `install.sh`, and
+the gate (a reusable GitHub workflow + the `classifier/` action). The code is the source of truth:
+the reason for a non-obvious choice goes in a comment next to the code it governs.
 
 `CLAUDE.md` is a one-line `@AGENTS.md` import. Put rules here, never there.
 
@@ -15,6 +17,9 @@ non-obvious choice goes in a comment next to the code it governs.
 
 ## Constraints that are easy to break
 
+- **No plugin.** The factory was a Claude Code plugin; that is retired. The runtime runs from a
+  project's `.git/factory-runtime` (or `FACTORY_HOME`) through `.factory/bin`, so nothing may rely
+  on a plugin install: no `CLAUDE_PLUGIN_ROOT`, no `claude plugin …`, no plugin manifests.
 - **Tech-general.** Nothing in `plugins/factory/` may assume a language or stack. Stack specifics
   come from the project's `.factory/config.json`; examples live in `examples/`.
 - **Local prerequisites are bash, git, gh, jq, claude.** Hooks and scripts may not need Node,
@@ -34,11 +39,12 @@ non-obvious choice goes in a comment next to the code it governs.
   `.claude/settings.json`, and the agent and skill stubs in `.claude/`. Every session fetches
   factory `main` through it. `main` may extend the thin layer, but must keep working with every
   thin-layer version a project may still have until its sync PR merges: keep hook names, `factory`
-  subcommands and `factory prompt <name>` stable.
-- **The reviewer is never briefed by the implementer.** The review runs as plugin subagents
-  (`agents/`) that the main agent triggers with an exact one-line message — `hooks/review-guard.sh`
-  enforces the wording, keeps them read-only, and keeps everyone else from writing the review record.
-  They gather the ticket, spec and diff themselves.
+  subcommands and `factory prompt <name>` stable. `scripts/check.sh` checks that every hook the
+  layer runs exists and that every agent and skill has the frontmatter its stub copies.
+- **The reviewer is never briefed by the implementer.** The review runs as factory subagents
+  (`agents/`, loaded through the project's stubs) that the main agent triggers with an exact
+  one-line message — `hooks/review-guard.sh` enforces the wording, keeps them read-only, and keeps
+  everyone else from writing the review record. They gather the ticket, spec and diff themselves.
 
 ## Tests
 

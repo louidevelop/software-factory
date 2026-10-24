@@ -19,7 +19,7 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 unset CLAUDE_CODE_REMOTE CLAUDE_PROJECT_DIR FACTORY_SOURCE
-export FACTORY_HOME="$PLUGIN" # start skips `claude plugin update`
+export FACTORY_HOME="$PLUGIN" # .factory/bin runs this working tree's factory, nothing fetched
 export HOME="$W/home"
 mkdir -p "$HOME"
 

@@ -1,7 +1,0 @@
-{
-  "name": "factory",
-  "description": "Local verification loop (hooks, blocklist), specs, tickets, local review, and the PR pipeline.",
-  "author": {
-    "name": "louidevelop"
-  }
-}

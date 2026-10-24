@@ -18,7 +18,7 @@ esac
 
 ROOT=$(factory_root)
 cd "$ROOT" || exit 1
-T="$FACTORY_PLUGIN/templates"
+T="$FACTORY_DIR/templates"
 
 sha() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi | cut -c1-12; }
 
@@ -57,14 +57,14 @@ stage() {
     cp "$T/$src" "$1/$dst"
   done
   mkdir -p "$1/.claude/agents"
-  for f in "$FACTORY_PLUGIN"/agents/*.md; do stub "$f" >"$1/.claude/agents/$(basename "$f")"; done
-  for f in "$FACTORY_PLUGIN"/skills/*/SKILL.md; do
+  for f in "$FACTORY_DIR"/agents/*.md; do stub "$f" >"$1/.claude/agents/$(basename "$f")"; done
+  for f in "$FACTORY_DIR"/skills/*/SKILL.md; do
     mkdir -p "$1/.claude/skills/$(basename "$(dirname "$f")")"
     stub "$f" >"$1/.claude/skills/$(basename "$(dirname "$f")")/SKILL.md"
   done
   # settings.json: sync owns only the `hooks` key (replaced whole), so the project's permissions
-  # and everything else survive. The plugin keys go: the thin layer replaces the plugin, and both
-  # at once would run every hook twice.
+  # and everything else survive. The retired factory plugin's keys go: it and the thin layer at
+  # once would run every hook twice.
   if [ -f "$SETTINGS" ]; then cat "$SETTINGS"; else echo '{}'; fi |
     jq --slurpfile h "$T/settings-hooks.json" '.hooks = $h[0].hooks | del(.enabledPlugins, .extraKnownMarketplaces)' \
       >"$1/$SETTINGS" 2>/dev/null || die "$SETTINGS is not valid JSON; fix it, then sync again"
@@ -145,6 +145,11 @@ if [ "$MODE" = pr ]; then
   [ -z "$(git status --porcelain)" ] || die "working tree is dirty; a sync PR starts from a clean tree"
   git fetch -q origin "$BASE"
   WT=$(mktemp -d)/sync
+  PUSHED=0
+  # However this ends, the worktree goes, and so does the branch unless it reached origin: a failed
+  # sync leaves nothing behind, and the next one starts clean.
+  trap 'rm -rf "$STAGE"; cd "$ROOT" && git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$(dirname "$WT")"
+    [ "$PUSHED" = 1 ] || git branch -D "$BRANCH" >/dev/null 2>&1' EXIT
   git worktree add -q -b "$BRANCH" "$WT" "origin/$BASE" || die "could not create sync worktree"
   cd "$WT" || exit 1
 fi
@@ -164,7 +169,11 @@ if [ "$MODE" = pr ]; then
   git add -A
   git commit -qm "factory sync: update factory-managed files" -m "Updated: ${BEHIND[*]}" ||
     die "nothing to commit after sync"
-  git push -q -u origin "$BRANCH"
+  # A refused push (GitHub's email privacy, branch rules, no access) ends the sync here: there is
+  # nothing on origin to open a PR from.
+  git push -q -u origin "$BRANCH" ||
+    die "could not push $BRANCH to origin (git says why above), so no sync PR was opened. Fix that, then run factory sync --pr again."
+  PUSHED=1
   factory_pr_create "$BASE" "$BRANCH" "factory sync" "$(
     cat <<BODY
 Updates the files the software factory manages in this project to the latest factory \`main\`.
@@ -172,13 +181,12 @@ Updates the files the software factory manages in this project to the latest fac
 Updated: ${BEHIND[*]}
 
 Sessions load the factory through \`.factory/bin/\`: every session start fetches factory \`main\`
-into the git directory, and the hooks, agents and skills run from that copy. This replaces the
-factory plugin, so its keys leave \`.claude/settings.json\`. If the plugin is still enabled in your
-user settings, disable it for this project, or every factory hook runs twice (\`factory doctor\` checks).
+into the git directory, and the hooks, agents and skills run from that copy. The keys of the
+retired factory plugin leave \`.claude/settings.json\`; if the plugin is still installed on your machine,
+remove it, or every factory hook runs twice (\`factory doctor\` checks).
 
 This PR touches guardrail files, so the gate always routes it to a human. It carries no ticket
 on purpose: a sync is never mixed into ticket work.
 BODY
-  )"
-  cd "$ROOT" && git worktree remove --force "$WT" >/dev/null 2>&1
+  )" || die "pushed $BRANCH, but could not open its PR; open it by hand, or delete the branch and run factory sync --pr again"
 fi

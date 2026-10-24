@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — set up the software factory in a project, without the Claude Code plugin.
+# install.sh — set up the software factory in a project.
 # Run it from the project's root:
 #   curl -fsSL https://raw.githubusercontent.com/louidevelop/software-factory/main/install.sh | bash
 #
@@ -20,8 +20,8 @@ die() {
 }
 
 usable() { [ -x "$1/plugins/factory/scripts/factory" ] || [ -x "$1/scripts/factory" ]; }
-# The runtime's plugin directory, from a factory checkout at <dir> (its root or plugins/factory).
-plugin_dir() { if [ -x "$1/plugins/factory/scripts/factory" ]; then printf '%s' "$1/plugins/factory"; else printf '%s' "$1"; fi; }
+# The factory directory (plugins/factory) of a factory checkout at <dir> (its root or plugins/factory).
+factory_dir() { if [ -x "$1/plugins/factory/scripts/factory" ]; then printf '%s' "$1/plugins/factory"; else printf '%s' "$1"; fi; }
 
 # All of it in one function, called on the last line: under `curl … | bash`, bash reads this script
 # from stdin as it runs, so a half-downloaded script must run nothing, and a command that reads
@@ -45,7 +45,7 @@ main() {
 
   if [ -n "${FACTORY_HOME:-}" ]; then
     usable "$FACTORY_HOME" || die "FACTORY_HOME=$FACTORY_HOME has no scripts/factory."
-    PLUGIN=$(plugin_dir "$FACTORY_HOME")
+    FACTORY_DIR=$(factory_dir "$FACTORY_HOME")
     say "using FACTORY_HOME=$FACTORY_HOME as the runtime, as-is"
   else
     COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P) || die "cannot find the git directory of $HERE"
@@ -63,14 +63,14 @@ main() {
       rm -rf "$RT" && mv "$RT.new.$$" "$RT"
     fi
     mkdir -p .factory/bin
-    cp "$(plugin_dir "$RT")/templates/bin/fetch.sh" .factory/bin/fetch && chmod +x .factory/bin/fetch ||
+    cp "$(factory_dir "$RT")/templates/bin/fetch.sh" .factory/bin/fetch && chmod +x .factory/bin/fetch ||
       die "could not write .factory/bin/fetch"
     .factory/bin/fetch || die "could not fetch the factory from $SOURCE"
-    PLUGIN=$(plugin_dir "$RT")
+    FACTORY_DIR=$(factory_dir "$RT")
   fi
 
   # The rest of the thin layer comes from the runtime itself, so install never drifts from sync.
-  CLAUDE_PROJECT_DIR=$HERE "$PLUGIN/scripts/factory" sync --apply || die "factory sync --apply failed"
+  CLAUDE_PROJECT_DIR=$HERE "$FACTORY_DIR/scripts/factory" sync --apply || die "factory sync --apply failed"
 
   echo
   if [ -f .factory/config.json ]; then

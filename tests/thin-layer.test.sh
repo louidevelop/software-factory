@@ -21,13 +21,13 @@ unset FACTORY_HOME FACTORY_SOURCE
 export HOME="$W/home" # doctor reads ~/.claude/settings.json
 mkdir -p "$HOME"
 
-# The factory to fetch: main of a local repo holding this working tree's plugin.
+# The factory to fetch: main of a local repo holding this working tree's factory.
 SRC="$W/factory"
 mkdir -p "$SRC/plugins"
 cp -R "$PLUGIN" "$SRC/plugins/factory"
 (cd "$SRC" && git init -q -b main && git add -A && G commit -qm factory)
 
-# A project that loads the factory as a plugin today, with its own permissions.
+# A project that loaded the factory as the retired plugin, with its own permissions.
 P="$W/project"
 mkdir -p "$P/.factory" "$P/.claude"
 cd "$P" || exit 1
@@ -58,9 +58,6 @@ jq -e '.permissions == {"allow": ["Bash(make test)"], "deny": ["Read(./.env)"]}'
 jq -e 'has("enabledPlugins") or has("extraKnownMarketplaces") | not' $S >/dev/null && ok || no "sync removes the plugin keys"
 jq -e --slurpfile t "$PLUGIN/templates/settings-hooks.json" '.hooks == $t[0].hooks' $S >/dev/null && ok || no "sync owns the hooks key"
 jq -e '.hooks.SessionStart[0].hooks[0].command | test("\\.factory/bin/fetch$")' $S >/dev/null && ok || no "SessionStart runs the fetch"
-# Same matchers and timeouts as the plugin's hooks.json, each through .factory/bin/hook.
-shape() { jq -S '.hooks | del(.SessionStart) | map_values(map({matcher, hooks: (.hooks | map({timeout, name: (.command | capture("(hooks/|hook )(?<n>[a-z-]+)") .n)}))}))' "$1"; }
-[ "$(shape "$PLUGIN/hooks/hooks.json")" = "$(shape $S)" ] && ok || no "the thin layer's hooks match the plugin's hooks.json"
 jq -c . $S >"$W/s" && mv "$W/s" $S
 "$FACTORY" sync >/dev/null 2>&1 && ok || no "a reformatted settings.json is still current"
 jq '.hooks.Stop[0].hooks[0].timeout = 1' $S >"$W/s" && mv "$W/s" $S
@@ -83,21 +80,33 @@ for d in "$PLUGIN"/skills/*/; do
   grep -qF ".factory/bin/factory prompt $s\`" "$f" 2>/dev/null && ok || no "$s skill stub loads its instructions"
 done
 
-# ---------- doctor: plugin and thin layer at once ----------
+# ---------- doctor: the retired plugin ----------
 # doctor runs the fetch; from nowhere, so these tests stay offline and the next section still
 # starts with no runtime.
 export FACTORY_SOURCE="$W/nowhere"
-PATH="$TESTS/fake-gh:$PATH" FAKE_GH_DIR="$W/gh" "$FACTORY" doctor >"$W/out" 2>&1
+doctor() { PATH="$TESTS/fake-gh:$PATH" FAKE_GH_DIR="$W/gh" "$FACTORY" doctor >"$W/out" 2>&1; }
+doctor
 grep -q 'loads through .factory/bin' "$W/out" && ok || no "doctor sees the thin layer"
-grep -q 'twice' "$W/out" && no "doctor warns about the plugin when it is off" || ok
-mkdir -p "$HOME/.claude"
+grep -q 'retired' "$W/out" && no "doctor warns about the plugin when there is none" || ok
+mkdir -p "$HOME/.claude/plugins"
 echo '{"enabledPlugins": {"factory@software-factory": true}}' >"$HOME/.claude/settings.json"
-PATH="$TESTS/fake-gh:$PATH" FAKE_GH_DIR="$W/gh" "$FACTORY" doctor >"$W/out" 2>&1
-grep -q 'runs twice' "$W/out" && ok || no "doctor warns when the plugin is enabled too"
+doctor
+grep -q 'retired factory plugin is still enabled, so every factory hook runs twice' "$W/out" && ok || no "doctor warns when the retired plugin is enabled"
 echo '{"enabledPlugins": {"factory@software-factory": false}}' >.claude/settings.local.json
-PATH="$TESTS/fake-gh:$PATH" FAKE_GH_DIR="$W/gh" "$FACTORY" doctor >"$W/out" 2>&1
+doctor
 grep -q 'twice' "$W/out" && no "a project's local settings disable the user's plugin" || ok
 rm -f .claude/settings.local.json "$HOME/.claude/settings.json"
+echo '{"version": 2, "plugins": {"factory@software-factory": [{"scope": "project", "projectPath": "/elsewhere"}]}}' >"$HOME/.claude/plugins/installed_plugins.json"
+doctor
+grep -q 'retired' "$W/out" && no "a plugin installed for another project only is not this project's" || ok
+echo '{"version": 2, "plugins": {"factory@software-factory": [{"scope": "user"}]}}' >"$HOME/.claude/plugins/installed_plugins.json"
+doctor
+grep -q 'retired factory plugin or its marketplace is still installed' "$W/out" && ok || no "doctor notes a leftover plugin install"
+rm -f "$HOME/.claude/plugins/installed_plugins.json"
+echo '{"software-factory": {"source": {"source": "github", "repo": "louidevelop/software-factory"}}}' >"$HOME/.claude/plugins/known_marketplaces.json"
+doctor
+grep -q 'still installed. Remove it: claude plugin uninstall' "$W/out" && ok || no "doctor notes a leftover marketplace"
+rm -rf "$HOME/.claude"
 
 # ---------- hook: fails closed without a runtime ----------
 RT="$P/.git/factory-runtime"

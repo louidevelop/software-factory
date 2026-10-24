@@ -230,7 +230,7 @@ fill() {
   done
   printf '%s' "$out$s"
 }
-out=$(cat "$FACTORY_PLUGIN/prompts/implement.md")
+out=$(cat "$FACTORY_DIR/prompts/implement.md")
 for kv in N="$N" BRANCH="$BRANCH" DIR="$DIR" STATE="$STATE" PRIOR="$PRIOR"; do
   out=$(fill "$out" "${kv%%=*}" "${kv#*=}")
 done

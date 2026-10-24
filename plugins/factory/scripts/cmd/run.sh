@@ -35,7 +35,6 @@ TURNS=$(factory_cfg '.run.maxTurns')
 CLAUDE_ARGS=(--permission-mode auto --permission-prompts none)
 [ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")
 [ -n "$TURNS" ] && claude --help 2>/dev/null | grep -q -- '--max-turns' && CLAUDE_ARGS+=(--max-turns "$TURNS")
-[ -n "${FACTORY_HOME:-}" ] && CLAUDE_ARGS+=(--plugin-dir "$FACTORY_HOME")
 COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 
 # Each pass is one attempt; `factory attempt` counts them on GitHub and blocks the ticket past

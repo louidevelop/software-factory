@@ -19,6 +19,7 @@ CONFIG=$(factory_config)
 
 TOOL=$(jq -r '.tool_name // empty' <<<"$INPUT")
 AGENT=$(jq -r '.agent_type // empty' <<<"$INPUT")
+# Any namespace too (the retired plugin's were factory:factory-…): the guard only ever widens.
 REVIEW_AGENT_RE='(^|:)factory-(reviewer|judge|resolver)$'
 
 block() {

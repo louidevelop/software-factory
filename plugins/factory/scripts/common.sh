@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # common.sh — sourced by every scripts/cmd/*.sh. Not run directly.
 # shellcheck source=../hooks/lib.sh
-. "$FACTORY_PLUGIN/hooks/lib.sh"
+. "$FACTORY_DIR/hooks/lib.sh"
 
 say() { printf '\033[1;36m[factory]\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[1;33m[factory]\033[0m %s\n' "$*" >&2; }
@@ -48,6 +48,20 @@ factory_api_list() {
   out=$(factory_api "$@" --paginate) || return 1
   jq -s 'add // []' <<<"$out"
 }
+
+# Every label the factory uses, as name|color|description: github-setup creates them, and doctor
+# checks that they exist. One list, so the two cannot drift apart.
+# shellcheck disable=SC2034 # read by the commands that source this
+FACTORY_LABELS=(
+  "agent-task|1d76db|A ticket an agent completes without asking questions"
+  "in-progress|fbca04|An agent run holds this ticket (also the lock)"
+  "blocked|d93f0b|Needs a human: see the latest comment for the question"
+  "rework|e99695|The gate sent the PR back: conflict or red on the current base"
+  "risk:low|0e8a16|Factory gate: low impact, merges when green"
+  "risk:high|b60205|Factory gate: waits for the owner's merge label"
+  "merge|0e8a16|The owner's go-ahead: the gate merges this high-impact PR"
+  "feature|5319e7|Parent issue tracking a feature spec"
+)
 
 factory_label_add() { factory_api "issues/$1/labels" -f "labels[]=$2" >/dev/null; }
 # Removing a label the issue does not have is a 404; that is fine.

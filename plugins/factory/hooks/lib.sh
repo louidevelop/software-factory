@@ -2,7 +2,7 @@
 # lib.sh — shared by every factory hook and script. Sourced, never run.
 #
 # The factory acts only in projects that opt in with .factory/config.json. Without it
-# every hook is a no-op, so enabling the plugin globally changes nothing elsewhere.
+# every hook is a no-op, so a factory hook that runs in another project changes nothing there.
 
 # jq is a declared prerequisite. Hooks fail CLOSED without it: a guardrail that cannot
 # read its input must block, not silently allow.

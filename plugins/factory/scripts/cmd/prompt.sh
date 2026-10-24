@@ -9,15 +9,15 @@ set -u
 . "$FACTORY_SCRIPTS/common.sh"
 
 NAME=${1:-}
-P=$FACTORY_PLUGIN
+P=$FACTORY_DIR
 names() { (cd "$P" && ls agents/*.md skills/*/SKILL.md) | sed -E 's#^agents/(.*)\.md$#\1#; s#^skills/(.*)/SKILL\.md$#\1#' | tr '\n' ' '; }
 [[ $NAME =~ ^[a-z][a-z-]*$ ]] || die "usage: factory prompt <name>; one of: $(names)"
 if [ -f "$P/agents/$NAME.md" ]; then
   FILE="$P/agents/$NAME.md"
 elif [ -f "$P/skills/$NAME/SKILL.md" ]; then
   FILE="$P/skills/$NAME/SKILL.md"
-  # Skills name factory files relative to the plugin ("two directories up from this skill's base
-  # directory"); from a stub that would point into the project's .claude/.
+  # Skills name factory files relative to the factory directory ("two directories up from this
+  # skill's base directory"); from a stub that would point into the project's .claude/.
   echo "Factory files this skill names (templates/…, scripts/factory, …) are under $P/; run the factory itself as .factory/bin/factory."
   echo
 else

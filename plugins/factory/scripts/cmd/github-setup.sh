@@ -21,17 +21,6 @@ SLUG=$(factory_repo_slug)
 [ -n "$SLUG" ] || die "no GitHub repo for $(pwd)"
 BASE=$(factory_base_branch)
 
-# name|color|description
-LABELS=(
-  "agent-task|1d76db|A ticket an agent completes without asking questions"
-  "in-progress|fbca04|An agent run holds this ticket (also the lock)"
-  "blocked|d93f0b|Needs a human: see the latest comment for the question"
-  "rework|e99695|The gate sent the PR back: conflict or red on the current base"
-  "risk:low|0e8a16|Factory gate: low impact, merges when green"
-  "risk:high|b60205|Factory gate: waits for the owner's merge label"
-  "merge|0e8a16|The owner's go-ahead: the gate merges this high-impact PR"
-  "feature|5319e7|Parent issue tracking a feature spec"
-)
 REPO_SETTINGS='{"allow_squash_merge":true,"allow_merge_commit":false,"allow_rebase_merge":false,"delete_branch_on_merge":true,"allow_update_branch":true,"squash_merge_commit_title":"PR_TITLE","squash_merge_commit_message":"PR_BODY"}'
 # Required checks: the project's own check workflow job and the factory gate. Not "up to date
 # before merge" (strict): a PR may be behind, because the gate checks it combined with the current
@@ -46,7 +35,7 @@ PROTECTION=$(jq -cn '{
 }')
 
 echo "factory github-setup for $SLUG (base branch: $BASE)"
-echo "  labels: $(printf '%s ' "${LABELS[@]%%|*}")"
+echo "  labels: $(printf '%s ' "${FACTORY_LABELS[@]%%|*}")"
 echo "  merge settings: squash only, delete branch on merge, allow update branch"
 echo "  branch protection on $BASE: required checks 'check' + 'gate', no force push, admins included"
 if [ "$APPLY" -ne 1 ]; then
@@ -55,7 +44,7 @@ if [ "$APPLY" -ne 1 ]; then
   exit 0
 fi
 
-for l in "${LABELS[@]}"; do
+for l in "${FACTORY_LABELS[@]}"; do
   IFS='|' read -r name color desc <<<"$l"
   # Create, or update the label that already exists (REST has no upsert).
   { factory_api labels -f name="$name" -f color="$color" -f description="$desc" >/dev/null 2>&1 ||

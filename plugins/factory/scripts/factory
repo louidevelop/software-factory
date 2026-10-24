@@ -3,8 +3,10 @@
 # subcommand here, so skills and unattended runs (local and in the cloud) run the exact same code.
 set -u
 FACTORY_SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-FACTORY_PLUGIN="$(dirname "$FACTORY_SCRIPTS")"
-export FACTORY_SCRIPTS FACTORY_PLUGIN
+# The factory's own directory (plugins/factory): in the runtime copy .factory/bin/fetch keeps in
+# the project's git directory, or in FACTORY_HOME when developing the factory.
+FACTORY_DIR="$(dirname "$FACTORY_SCRIPTS")"
+export FACTORY_SCRIPTS FACTORY_DIR
 
 usage() {
   cat <<'USAGE'

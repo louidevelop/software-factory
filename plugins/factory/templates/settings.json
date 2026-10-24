@@ -1,15 +1,4 @@
 {
-  "extraKnownMarketplaces": {
-    "software-factory": {
-      "source": {
-        "source": "github",
-        "repo": "louidevelop/software-factory"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "factory@software-factory": true
-  },
   "permissions": {
     "allow": [
       "Bash(.factory/bin/factory review *)",
