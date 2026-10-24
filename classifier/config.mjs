@@ -43,5 +43,6 @@ export function validateConfig(c) {
   }
   if (c.run?.maxAttempts !== undefined && !isInt(c.run.maxAttempts)) p.push("run.maxAttempts must be a positive integer");
   if (c.run?.maxTurns !== undefined && !isInt(c.run.maxTurns)) p.push("run.maxTurns must be a positive integer");
+  if (c.run?.staleMinutes !== undefined && !isInt(c.run.staleMinutes)) p.push("run.staleMinutes must be a positive integer");
   return p;
 }

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# start — pick up a ticket. Interactive sessions and the unattended loop run this same code.
-#   factory start [<issue> | next] [--parent <n>]
-# Exit codes: 0 started (last line: WORKTREE=<path>), 3 nothing to start, 4 base branch red,
-#             5 ticket blocked during pickup, 1 error.
+# start — pick up a ticket. Interactive sessions and `factory attempt` run this same code.
+#   factory start [<issue> | next] [--parent <n>] [--resume] [--in-place]
+#   --resume    the ticket may already be in progress (an earlier attempt's, or a rework): its
+#               existing branch is picked up, from origin when this clone does not have it
+#   --in-place  check the branch out in this clone instead of a worktree (cloud runs: each one
+#               is a fresh clone, and the session works where it started)
+# Exit codes: 0 started (last line: WORKTREE=<path>, the checkout), 3 nothing to start,
+#             4 base branch red, 5 ticket blocked during pickup, 1 error.
 set -u
 # shellcheck source=../common.sh
 . "$FACTORY_SCRIPTS/common.sh"
@@ -11,18 +15,23 @@ factory_require_config
 
 WHICH=next
 PARENT=""
+RESUME=0
+IN_PLACE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --parent)
       PARENT=${2:?--parent needs an issue number}
       shift
       ;;
+    --resume) RESUME=1 ;;
+    --in-place) IN_PLACE=1 ;;
     next | [0-9]*) WHICH=$1 ;;
-    *) die "usage: factory start [<issue> | next] [--parent <n>]" ;;
+    *) die "usage: factory start [<issue> | next] [--parent <n>] [--resume] [--in-place]" ;;
   esac
   shift
 done
 
+HERE=$(git rev-parse --show-toplevel) || die "not in a git checkout"
 MAIN=$(factory_main_root)
 cd "$MAIN" || exit 1
 CONFIG="$MAIN/.factory/config.json"
@@ -32,7 +41,8 @@ SLUG=$(factory_repo_slug)
 
 # 1. Latest factory. Each new session follows factory main; the running session keeps the
 #    plugin it started with. Skipped when developing the factory itself (FACTORY_HOME).
-if [ -z "${FACTORY_HOME:-}" ] && command -v claude >/dev/null 2>&1; then
+#    No plugin in place (cloud runs load the factory through the thin layer).
+if [ -z "${FACTORY_HOME:-}" ] && [ "$IN_PLACE" -eq 0 ] && command -v claude >/dev/null 2>&1; then
   say "updating the factory plugin"
   claude plugin marketplace update software-factory >/dev/null 2>&1 || warn "could not update the software-factory marketplace"
   claude plugin update factory@software-factory >/dev/null 2>&1 || warn "could not update factory@software-factory"
@@ -61,55 +71,115 @@ T=$(ticket_json "$N") || die "cannot read issue #$N"
 LABELS=$(jq -r '.labels[].name' <<<"$T")
 grep -qx agent-task <<<"$LABELS" || die "#$N is not labelled agent-task"
 grep -qx blocked <<<"$LABELS" && die "#$N is blocked; a human answers the question first"
-grep -qx in-progress <<<"$LABELS" && die "#$N is already in progress (the label is the lock)"
+if [ "$RESUME" -eq 0 ]; then
+  grep -qx in-progress <<<"$LABELS" && die "#$N is already in progress (the label is the lock)"
+fi
 OPEN_BLOCKERS=$(factory_open_blockers "$N") || die "cannot read #$N's blockers"
 [ -z "$OPEN_BLOCKERS" ] || die "#$N waits for #${OPEN_BLOCKERS// /, #} to merge"
 TITLE=$(jq -r .title <<<"$T")
 BODY=$(jq -r '.body // ""' <<<"$T")
 
 # 4. Lock.
-factory_label_add "$N" in-progress || die "could not label #$N in-progress"
-say "#$N locked: $TITLE"
+if grep -qx in-progress <<<"$LABELS"; then
+  FRESH=0
+  say "#$N resumed: $TITLE"
+else
+  FRESH=1
+  factory_label_add "$N" in-progress || die "could not label #$N in-progress"
+  say "#$N locked: $TITLE"
+fi
+# unlock — a failed pickup releases only a lock it took itself.
+unlock() { [ "$FRESH" -eq 0 ] || factory_label_remove "$N" in-progress; }
 
 # 5. Prerequisites: unticked boxes block. The human ticks them; secrets are never inspected.
+#    A resumed ticket passed them when it was first picked up.
 UNTICKED=$(markdown_section "$BODY" Prerequisites | grep -E '^\s*[-*] \[ \]' | sed -E 's/^\s*[-*] \[ \] *//' | grep -vE '^(…|\.\.\.)?$' || true)
-if [ -n "$UNTICKED" ]; then
+if [ "$RESUME" -eq 0 ] && [ -n "$UNTICKED" ]; then
   factory_block_ticket "$N" "prerequisites not confirmed: $(paste -sd ';' <<<"$UNTICKED")"
   exit 5
 fi
 
-# 6. Worktree on a fresh branch from the base.
+# 6. The branch: the ticket's existing one (this clone's, else origin's, where an earlier attempt
+#    pushed its work), or a fresh one from the base.
 git fetch -q origin "$BASE" || die "could not fetch $BASE"
-BRANCH="ticket/$N-$(ticket_slug "$TITLE")"
-# Inside the project, so the session's working directory, file tools and the review subagents
-# (which start in the project folder) all reach it. Kept out of git via the local exclude file,
-# which the project's tools honour like .gitignore.
-WT="$MAIN/.factory/worktrees/ticket-$N"
-EXCLUDE="$(git rev-parse --git-common-dir)/info/exclude"
-if ! git check-ignore -q "$MAIN/.factory/worktrees/x" 2>/dev/null; then
-  mkdir -p "$(dirname "$EXCLUDE")"
-  printf '\n# software factory: ticket worktrees\n/.factory/worktrees/\n' >>"$EXCLUDE"
-fi
-if [ -d "$WT" ]; then
-  say "reusing worktree $WT"
+BRANCH=$(git for-each-ref --format='%(refname:short)' "refs/heads/ticket/$N-*" | head -1)
+REMOTE=$(git ls-remote --heads origin "refs/heads/ticket/$N-*" 2>/dev/null | awk '{sub("refs/heads/", "", $2); print $2; exit}')
+[ -n "$BRANCH" ] || BRANCH=$REMOTE
+[ -n "$BRANCH" ] || BRANCH="ticket/$N-$(ticket_slug "$TITLE")"
+if [ -n "$REMOTE" ] && [ "$REMOTE" = "$BRANCH" ]; then
+  git fetch -q origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || die "could not fetch $BRANCH"
+  say "resuming $BRANCH from origin"
 else
-  mkdir -p "$(dirname "$WT")"
-  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-    git worktree add -q "$WT" "$BRANCH" || die "could not add worktree for $BRANCH"
-  else
-    git worktree add -q -b "$BRANCH" "$WT" "origin/$BASE" || die "could not create $BRANCH"
-  fi
-  # Gitignored files the project needs (e.g. .env) are copied by this script, never by an agent.
-  while IFS= read -r f; do
-    [ -n "$f" ] && [ -e "$MAIN/$f" ] && cp -R "$MAIN/$f" "$WT/$f" && say "copied $f into the worktree"
-  done < <(jq -r '.setup.copy[]? // empty' "$CONFIG")
-  SETUP=$(jq -r '.setup.command // empty' "$CONFIG")
-  if [ -n "$SETUP" ]; then
-    say "setup: $SETUP"
-    (cd "$WT" && bash -c "$SETUP") || {
-      factory_label_remove "$N" in-progress
-      die "setup failed in $WT"
+  REMOTE=""
+fi
+# catch_up <dir> — fast-forward the checkout to origin's copy of the branch (pushed by an attempt
+# that ran elsewhere). Diverged work stays as it is; the agent sees both in the attempt's state.
+catch_up() {
+  [ -n "$REMOTE" ] || return 0
+  git -C "$1" merge -q --ff-only "origin/$BRANCH" 2>/dev/null ||
+    git -C "$1" merge-base --is-ancestor "origin/$BRANCH" HEAD || warn "$BRANCH and origin/$BRANCH have diverged"
+}
+run_setup() {
+  local setup
+  setup=$(jq -r '.setup.command // empty' "$CONFIG")
+  [ -n "$setup" ] || return 0
+  say "setup: $setup"
+  (cd "$1" && bash -c "$setup") || {
+    unlock
+    die "setup failed in $1"
+  }
+}
+
+if [ "$IN_PLACE" -eq 1 ]; then
+  WT=$HERE
+  cd "$WT" || exit 1
+  if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
+    [ -z "$(git status --porcelain)" ] || {
+      unlock
+      die "$WT has uncommitted changes; an in-place ticket starts from a clean tree"
     }
+    if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+      git checkout -q "$BRANCH"
+    elif [ -n "$REMOTE" ]; then
+      git checkout -q -b "$BRANCH" "origin/$BRANCH"
+    else
+      git checkout -q -b "$BRANCH" "origin/$BASE"
+    fi || {
+      unlock
+      die "could not check out $BRANCH"
+    }
+  fi
+  catch_up "$WT"
+  # Every cloud run is a fresh clone, so the project's setup runs every time.
+  run_setup "$WT"
+else
+  # Inside the project, so the session's working directory, file tools and the review subagents
+  # (which start in the project folder) all reach it. Kept out of git via the local exclude file,
+  # which the project's tools honour like .gitignore.
+  WT="$MAIN/.factory/worktrees/ticket-$N"
+  EXCLUDE="$(git rev-parse --git-common-dir)/info/exclude"
+  if ! git check-ignore -q "$MAIN/.factory/worktrees/x" 2>/dev/null; then
+    mkdir -p "$(dirname "$EXCLUDE")"
+    printf '\n# software factory: ticket worktrees\n/.factory/worktrees/\n' >>"$EXCLUDE"
+  fi
+  if [ -d "$WT" ]; then
+    say "reusing worktree $WT"
+    [ -n "$(git -C "$WT" status --porcelain)" ] || catch_up "$WT"
+  else
+    mkdir -p "$(dirname "$WT")"
+    if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+      git worktree add -q "$WT" "$BRANCH" || die "could not add worktree for $BRANCH"
+      catch_up "$WT"
+    elif [ -n "$REMOTE" ]; then
+      git worktree add -q -b "$BRANCH" "$WT" "origin/$BRANCH" || die "could not create $BRANCH"
+    else
+      git worktree add -q -b "$BRANCH" "$WT" "origin/$BASE" || die "could not create $BRANCH"
+    fi
+    # Gitignored files the project needs (e.g. .env) are copied by this script, never by an agent.
+    while IFS= read -r f; do
+      [ -n "$f" ] && [ -e "$MAIN/$f" ] && cp -R "$MAIN/$f" "$WT/$f" && say "copied $f into the worktree"
+    done < <(jq -r '.setup.copy[]? // empty' "$CONFIG")
+    run_setup "$WT"
   fi
 fi
 
@@ -118,14 +188,18 @@ fi
 CHECK=$(jq -r .check "$CONFIG")
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$(git rev-parse "origin/$BASE")" ]; then
   if ! (cd "$WT" && bash -c "$CHECK" >/dev/null 2>&1); then
-    factory_label_remove "$N" in-progress
+    unlock
     warn "\`$CHECK\` is red on a fresh $BASE. No ticket starts until $BASE is fixed."
     exit 4
   fi
 fi
 
-# 8. Run state for the later steps (never committed: it lives in the git dir).
+# 8. Run state for the later steps (never committed: it lives in the git dir). A clone works on
+#    one ticket after another in place, so another ticket's leftovers go first.
 STATE=$(cd "$WT" && factory_state_dir)
+if [ "$(cat "$STATE/ticket" 2>/dev/null)" != "$N" ]; then
+  rm -rf "$STATE/pr-body.md" "$STATE/review.json" "$STATE/review-current" "$STATE/attempt.json"
+fi
 printf '%s\n' "$N" >"$STATE/ticket"
 # A PR description draft to fill in, from the factory's template (the project may not have its
 # own copy yet, e.g. while a factory sync PR is open).

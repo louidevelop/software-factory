@@ -42,6 +42,22 @@ factory_cfg() {
   jq -r "$1 // empty" "$(factory_config)" 2>/dev/null
 }
 
+# The attempt state of the checkout at <dir> (written by `factory attempt`), printed only when it
+# belongs to what is checked out now: the same branch, with the attempt's starting commit in
+# HEAD's history. A cloud workspace can carry files from an older snapshot, so a state file on
+# its own is never trusted.
+factory_attempt_file() {
+  local f branch head
+  f="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/factory/attempt.json" || return 1
+  [ -f "$f" ] || return 1
+  branch=$(jq -r '.branch // empty' "$f" 2>/dev/null)
+  head=$(jq -r '.head // empty' "$f" 2>/dev/null)
+  [ -n "$branch" ] && [ -n "$head" ] || return 1
+  [ "$(git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "$branch" ] || return 1
+  git -C "$1" merge-base --is-ancestor "$head" HEAD 2>/dev/null || return 1
+  printf '%s' "$f"
+}
+
 # Globs everywhere in the factory share one dialect, the same as the classifier's:
 # `*` and `**` match any characters INCLUDING `/`, `**/` also matches zero directories,
 # `?` matches one character, `{a,b}` matches either. So `*.py` matches `src/app/main.py`.

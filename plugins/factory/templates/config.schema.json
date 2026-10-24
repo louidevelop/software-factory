@@ -90,7 +90,8 @@
       "additionalProperties": false,
       "properties": {
         "model": { "type": "string", "description": "Model for unattended implementation runs. Default: your default model." },
-        "maxAttempts": { "type": "integer", "minimum": 1, "default": 3 },
+        "maxAttempts": { "type": "integer", "minimum": 1, "default": 3, "description": "Attempts at a ticket (counted on GitHub, since it last finished one or was blocked) before it blocks for the owner." },
+        "staleMinutes": { "type": "integer", "minimum": 1, "default": 120, "description": "An attempt that has not ended counts as live, and keeps other attempts from starting, until this long after it started or after the last commit on its branch. After that it is resumed as crashed." },
         "maxTurns": { "type": "integer", "minimum": 1, "default": 80 },
         "baseBranch": { "type": "string", "default": "main" }
       }

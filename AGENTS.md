@@ -44,7 +44,8 @@ non-obvious choice goes in a comment next to the code it governs.
 
 - Every hook behaviour has a case in `tests/hooks.test.sh`; every classifier rule has fixtures in
   `classifier/*.test.mjs`; the scripts' GitHub logic is tested in `tests/scripts.test.sh` against
-  `tests/fake-gh/gh`, which serves only `gh api` replies; the thin layer (sync, fetch,
+  `tests/fake-gh/gh`, which serves only `gh api` replies; `factory attempt` and `finish` in
+  `tests/attempt.test.sh`, with the same fake and a local bare origin; the thin layer (sync, fetch,
   `.factory/bin/hook`, `factory prompt`) in `tests/thin-layer.test.sh`, fetching from a local repo.
   Add the case in the same change as the behaviour.
 - Never weaken or delete a test to make `check` pass.

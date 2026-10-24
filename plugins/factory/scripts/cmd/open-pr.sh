@@ -18,23 +18,12 @@ BASE=$(factory_base_branch)
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 case "$BRANCH" in ticket/"$N"-*) ;; *) die "branch $BRANCH is not ticket #$N's branch" ;; esac
 
-# Done criteria.
-[ -z "$(git status --porcelain)" ] || die "the tree is not clean; commit or discard first"
-[ "$(git rev-list --count "origin/$BASE..HEAD")" -gt 0 ] || die "no commits on $BRANCH"
-CHECK=$(factory_cfg '.check')
-say "running \`$CHECK\`"
-(bash -c "$CHECK" >/dev/null 2>&1) || die "\`$CHECK\` is red; a PR never opens red"
-
+# Done criteria, the check included: a PR never opens red.
+say "checking the done criteria (with \`$(factory_cfg '.check')\`)"
+PROBLEMS=$(factory_done_problems)
+[ -z "$PROBLEMS" ] || die "not ready for a PR:"$'\n'"$PROBLEMS"
 DRAFT="$STATE/pr-body.md"
-[ -f "$DRAFT" ] || die "no PR description at $DRAFT (fill .github/pull_request_template.md there)"
-for s in Verification Decisions; do
-  [ -n "$(markdown_section "$(cat "$DRAFT")" "$s" | grep -vE '^\s*(<!--.*-->)?\s*$')" ] || die "PR description: '## $s' is empty"
-done
-
 REVIEW="$STATE/review.json"
-[ -f "$REVIEW" ] || die "no local review yet: factory review begin $N (then the reviewer and judges, then assemble $N)"
-[ "$(jq -r .head "$REVIEW")" = "$(git rev-parse HEAD)" ] ||
-  die "the local review is for an older commit: after fixing confirmed findings run factory review resolve-begin $N and assemble $N --resolve; otherwise review again"
 
 # The draft's own "## Local review" (template placeholder) is replaced by the real one.
 BODY=$(awk '/^## Local review/ { exit } { print }' "$DRAFT")

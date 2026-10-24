@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # factory — the factory's command line. Every deterministic step of the pipeline is a
-# subcommand here, so skills and the unattended loop run the exact same code.
+# subcommand here, so skills and unattended runs (local and in the cloud) run the exact same code.
 set -u
 FACTORY_SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 FACTORY_PLUGIN="$(dirname "$FACTORY_SCRIPTS")"
@@ -18,10 +18,18 @@ usage: factory <command> [args]
   tickets feature|create|next|list|show
                          GitHub plumbing for specs and tickets (sub-issues, blocked-by); show: a ticket + comments
   start [<issue> | next] pick up a ticket: lock, preflight, prerequisites, drift, worktree
+  attempt [<issue> | next] [--parent <n>] [--in-place | --worktree]
+                         start one unattended attempt (rework first, then an unfinished
+                         attempt, then the next ready ticket) and print its prompt;
+                         in place by default in Claude's cloud
+  finish [<issue>]       end the attempt: open the PR when the ticket is done, otherwise
+                         push the work in progress and record what is missing
   review begin <issue> | judges | assemble [--resolve] | resolve-begin
                          local review through the reviewer/judge/resolver subagents
   open-pr <issue>        push the branch and open the PR with the review attached
-  run [<parent-issue>]   unattended loop: start → implement → review → fix → open-pr, repeat
+  run [<issue> | next] [--parent <n>]
+                         one ticket unattended: attempt, then fresh claude -p sessions
+                         until its PR is open or it is blocked (run.maxAttempts)
   block <issue> <reason> label a ticket blocked and comment the reason
   repo                   owner/repo from the git remote, for `gh api repos/$(factory repo)/…`
   prompt <agent|skill>   print the full instructions of a factory agent or skill
@@ -32,7 +40,7 @@ USAGE
 cmd=${1:-help}
 shift || true
 case "$cmd" in
-  doctor | github-setup | sync | tickets | start | review | open-pr | run | block | archive-specs | prompt)
+  doctor | github-setup | sync | tickets | start | attempt | finish | review | open-pr | run | block | archive-specs | prompt)
     exec bash "$FACTORY_SCRIPTS/cmd/$cmd.sh" "$@"
     ;;
   repo)

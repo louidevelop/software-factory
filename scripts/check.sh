@@ -35,6 +35,9 @@ bash tests/hooks.test.sh || fail "hook tests"
 step "script tests"
 bash tests/scripts.test.sh || fail "script tests"
 
+step "attempt tests"
+bash tests/attempt.test.sh || fail "attempt tests"
+
 step "thin layer tests"
 bash tests/thin-layer.test.sh || fail "thin layer tests"
 

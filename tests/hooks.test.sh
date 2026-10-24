@@ -140,6 +140,39 @@ expect "stop-gate blocks on red check" stop-gate.sh 2 "tests: 1 failed" '{"stop_
 expect "stop-gate lets go once already active" stop-gate.sh 0 "" '{"stop_hook_active": true}'
 rm "$PROJECT/FAIL_CHECK"
 
+# ---------- stop-gate: an open attempt holds the session until finish or block ----------
+AP=$(mktemp -d)
+(cd "$AP" && git init -q -b ticket/7-x && mkdir -p .factory && cp "$PROJECT/.factory/config.json" .factory/ &&
+  git -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m one)
+AS="$AP/.git/factory/attempt.json"
+mkdir -p "$AP/.git/factory"
+# attempt_state <status> [<branch>] [<head>]
+attempt_state() {
+  jq -n --arg s "$1" --arg b "${2:-ticket/7-x}" --arg h "${3:-$(git -C "$AP" rev-parse HEAD)}" \
+    '{ticket: 7, branch: $b, head: $h, attempt: 1, status: $s}' >"$AS"
+}
+in_ap() { jq -cn --arg c "$AP" --argjson a "$1" '{stop_hook_active: $a, cwd: $c}'; }
+attempt_state open
+expect "stop-gate holds an open attempt" stop-gate.sh 2 "factory finish 7" "$(in_ap false)"
+expect "stop-gate names block as the other way out" stop-gate.sh 2 "factory block 7" "$(in_ap false)"
+expect "stop-gate holds an open attempt past the loop guard" stop-gate.sh 2 "factory finish 7" "$(in_ap true)"
+(cd "$AP" && git -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m two)
+expect "stop-gate holds it after more commits" stop-gate.sh 2 "factory finish 7" "$(in_ap false)"
+for _ in 1 2 3 4 5; do printf '%s' "$(in_ap true)" | "$HOOKS/stop-gate.sh" >/dev/null 2>&1; done
+expect "stop-gate lets go after repeated blocked stops" stop-gate.sh 0 "" "$(in_ap true)"
+touch "$AP/FAIL_CHECK"
+for s in finished unfinished blocked; do
+  attempt_state "$s"
+  expect "stop-gate lets an ended ($s) attempt end the session" stop-gate.sh 0 "" "$(in_ap false)"
+done
+# A leftover state file (another branch, or a start commit HEAD does not contain) is not trusted:
+# the check gate applies as without an attempt.
+attempt_state open ticket/9-old
+expect "stop-gate ignores an attempt of another branch" stop-gate.sh 2 "tests: 1 failed" "$(in_ap false)"
+attempt_state open ticket/7-x 1111111111111111111111111111111111111111
+expect "stop-gate ignores an attempt HEAD does not descend from" stop-gate.sh 2 "tests: 1 failed" "$(in_ap false)"
+rm -rf "$AP"
+
 # ---------- review-guard: spawn messages ----------
 spawn() { jq -cn --arg t "$1" --arg p "$2" '{tool_name: "Agent", tool_input: {subagent_type: $t, prompt: $p, description: "x"}}'; }
 expect "reviewer with the exact message" review-guard.sh 0 "" "$(spawn factory:factory-reviewer 'Review ticket #12')"

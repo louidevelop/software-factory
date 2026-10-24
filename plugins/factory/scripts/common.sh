@@ -136,15 +136,85 @@ markdown_section() {
   ' <<<"$1"
 }
 
+# Succeeds when the markdown on stdin says something: HTML comments (the template's hints, which
+# span lines) and empty list items do not count.
+markdown_filled() {
+  awk '{
+    line = $0; out = ""
+    while (1) {
+      if (inc) { i = index(line, "-->"); if (!i) break; line = substr(line, i + 3); inc = 0 }
+      i = index(line, "<!--"); if (!i) { out = out line; break }
+      out = out substr(line, 1, i - 1); line = substr(line, i + 4); inc = 1
+    }
+    print out
+  }' | grep -qvE '^[[:space:]]*([-*+][[:space:]]*)?$'
+}
+
 ticket_slug() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40 | sed -E 's/-+$//'
 }
 
 factory_block_ticket() {
-  local n=$1 reason=$2 rc=0
+  local n=$1 reason=$2 rc=0 wt f
   factory_label_add "$n" blocked || rc=1
   factory_label_remove "$n" in-progress
   factory_comment "$n" "**Blocked** (factory): $reason" || rc=1
   if [ "$rc" -eq 0 ]; then warn "#$n blocked: $reason"; else warn "could not block #$n on GitHub (reason: $reason)"; fi
+  # A block ends the ticket's open attempt, so the Stop hook lets the session end.
+  wt=$(factory_ticket_worktree "$n" 2>/dev/null)
+  if [ -n "$wt" ] && f=$(factory_attempt_file "$wt") && [ "$(jq -r .ticket "$f")" = "$n" ] && [ "$(jq -r .status "$f")" = open ]; then
+    attempt_end "$f" blocked "$reason"
+  fi
   return "$rc"
+}
+
+# Done criteria ---------------------------------------------------------------
+
+# factory_done_problems [--no-check] — run inside the ticket's checkout. One markdown bullet per
+# unmet done criterion (what open-pr and finish require); no output when the ticket is done.
+factory_done_problems() {
+  local base state n branch draft s check out
+  base=$(factory_base_branch)
+  state=$(factory_state_dir)
+  n=$(cat "$state/ticket" 2>/dev/null)
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  [ -z "$(git status --porcelain)" ] || echo "- The tree has uncommitted changes: commit them, or discard what is wrong."
+  [ "$(git rev-list --count "origin/$base..HEAD" 2>/dev/null || echo 0)" -gt 0 ] || echo "- No commits on $branch yet."
+  draft="$state/pr-body.md"
+  if [ -f "$draft" ]; then
+    for s in Verification Decisions; do
+      markdown_section "$(cat "$draft")" "$s" | markdown_filled ||
+        echo "- The PR description's \`## $s\` is empty ($draft)."
+    done
+  else
+    echo "- No PR description at $draft (fill in .github/pull_request_template.md there)."
+  fi
+  if [ ! -f "$state/review.json" ]; then
+    echo "- No local review yet: factory review begin $n, then the reviewer and judges, then factory review assemble $n."
+  elif [ "$(jq -r .head "$state/review.json")" != "$(git rev-parse HEAD)" ]; then
+    echo "- The local review is for an older commit: after fixing confirmed findings run factory review resolve-begin $n and factory review assemble $n --resolve; otherwise begin the review again."
+  fi
+  [ "${1:-}" = --no-check ] && return 0
+  check=$(factory_cfg '.check')
+  out=$(bash -c "$check" 2>&1) ||
+    printf -- '- `%s` is red. Last lines:\n```\n%s\n```\n' "$check" "$(tail -40 <<<"$out")"
+}
+
+# Attempts --------------------------------------------------------------------
+# An attempt is one session's try at one ticket: `factory attempt` … `factory finish`. Its record
+# lives on GitHub, because every cloud run starts on a fresh VM: a ticket comment that starts with
+# `<!-- factory:attempt <k> branch=<branch> -->` and gains `<!-- factory:attempt-end <k> <outcome> -->`
+# when the attempt ends. <git dir>/factory/attempt.json only lets finish, block and the Stop hook
+# find the open attempt of a checkout (see factory_attempt_file).
+
+# attempt_end <attempt.json> <finished|unfinished|blocked> [report] — mark the attempt ended,
+# here and in its ticket comment.
+attempt_end() {
+  local f=$1 outcome=$2 report=${3:-} k body
+  k=$(jq -r .attempt "$f")
+  jq --arg s "$outcome" '.status = $s' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+  body="$(jq -r .comment_body "$f")"$'\n\n'"<!-- factory:attempt-end $k $outcome -->"$'\n'"**Ended: $outcome.**"
+  [ -z "$report" ] || body+=$'\n\n'"$report"
+  factory_api "issues/comments/$(jq -r .comment_id "$f")" -X PATCH -f body="$body" >/dev/null ||
+    warn "could not record the end of attempt $k on GitHub"
 }
