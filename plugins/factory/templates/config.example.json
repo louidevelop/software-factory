@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "owners": ["louidevelop"],
+  "check": "make check",
+  "fix": [
+    {
+      "glob": "*.py",
+      "command": "uv run ruff format {file} && uv run ruff check --fix {file}"
+    }
+  ],
+  "setup": { "command": "uv sync", "copy": [".env"] },
+  "block": [
+    {
+      "pattern": "alembic +upgrade",
+      "reason": "migrations are applied by a human after review."
+    }
+  ],
+  "paths": {
+    "migrations": ["migrations/**"],
+    "sensitive": ["src/app/auth/**"],
+    "guardrails": ["pyproject.toml", "Makefile", "scripts/check-*"],
+    "dependencies": [],
+    "generated": [],
+    "tests": []
+  },
+  "limits": { "lines": 400, "files": 20 },
+  "review": { "model": "opus" },
+  "run": { "maxAttempts": 3, "maxTurns": 80, "baseBranch": "main" }
+}

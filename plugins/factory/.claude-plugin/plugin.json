@@ -1,0 +1,6 @@
+{
+  "name": "factory",
+  "version": "0.1.0",
+  "description": "Local verification loop (hooks, blocklist), specs, tickets, local review, and the PR pipeline.",
+  "author": { "name": "louidevelop" }
+}
