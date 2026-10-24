@@ -6,10 +6,11 @@ The sandbox uses a non-TypeScript stack (e.g. a small Python service), so tech-g
 
 ## Phase 0 — Repo and accounts
 
-- Create `~/code/software-factory` and a private GitHub repo `louidevelop/software-factory`. Seed `docs/` with the current-state map, the decision log and this plan.
+- ✅ Created `~/code/software-factory` and the private repo `louidevelop/software-factory`. Seeded `docs/`.
 - **Human:** create the machine-user GitHub account and its token. (Agents may not create accounts or handle tokens.)
-- To verify first: fine-grained tokens may not reach repos owned by *another personal account* where the machine user is only a collaborator. If so, the options are a classic token with `repo` scope, or moving project repos into a free GitHub organization, which allows a fine-grained token scoped to it.
-- To verify: whether a reusable workflow in a private repo can be called from other private repos on a personal account (Actions access setting).
+- Finding (GitHub docs, 2026-10-24): fine-grained tokens list "contributing to repositories where the user is an outside or repository collaborator" as a known gap. So the machine user needs a **classic token with `repo` scope**. Its reach is bounded by which repos it is a collaborator on (write access only). The alternative, if that's too broad later: move project repos into a free organization and use a fine-grained token scoped to it.
+- Finding: a private reusable workflow *can* be called from other private repos owned by the same personal account. It requires the factory repo's Actions access setting (Settings → Actions → General → Access) to be set to "Accessible from repositories owned by the user". It is currently `none`; set it in phase 3, when `classify.yml` exists.
+- Consequence for the gate (phase 3): the machine user has write access, so its approval would count as an approval. The classifier must accept approvals only from the owner list (in `.factory/config`, read from `main`), never just "any approval".
 
 ## Phase 1 — Local loop core (plugin)
 
