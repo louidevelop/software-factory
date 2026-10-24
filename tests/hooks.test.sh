@@ -173,6 +173,31 @@ attempt_state open ticket/7-x 1111111111111111111111111111111111111111
 expect "stop-gate ignores an attempt HEAD does not descend from" stop-gate.sh 2 "tests: 1 failed" "$(in_ap false)"
 rm -rf "$AP"
 
+# ---------- stop-gate: a checkout without changes of its own is not checked ----------
+# A clone of an origin with a red check: an idle session ends; a dirty tree or an unpushed commit
+# brings the check back.
+CL=$(mktemp -d)
+(cd "$CL" && git init -q --bare origin.git && git init -q -b main work && cd work && mkdir -p .factory &&
+  cp "$PROJECT/.factory/config.json" .factory/ && echo deps/ >.gitignore && touch FAIL_CHECK && git add -A &&
+  git -c user.name=t -c user.email=t@example.com commit -q -m one && git remote add origin ../origin.git &&
+  git push -q origin main 2>/dev/null)
+W="$CL/work"
+in_w() { jq -cn --arg c "$W" '{stop_hook_active: false, cwd: $c}'; }
+expect "stop-gate lets an unchanged clone end with a red check" stop-gate.sh 0 "" "$(in_w)"
+mkdir -p "$W/deps" && touch "$W/deps/installed"
+expect "stop-gate ignores ignored files" stop-gate.sh 0 "" "$(in_w)"
+touch "$W/new.txt"
+expect "stop-gate checks a tree with an untracked file" stop-gate.sh 2 "tests: 1 failed" "$(in_w)"
+(cd "$W" && git add new.txt)
+expect "stop-gate checks a tree with a staged change" stop-gate.sh 2 "tests: 1 failed" "$(in_w)"
+(cd "$W" && git -c user.name=t -c user.email=t@example.com commit -q -m two)
+expect "stop-gate checks a commit no remote has" stop-gate.sh 2 "tests: 1 failed" "$(in_w)"
+(cd "$W" && git push -q origin main 2>/dev/null && git fetch -q origin)
+expect "stop-gate lets pushed commits go" stop-gate.sh 0 "" "$(in_w)"
+echo changed >>"$W/new.txt"
+expect "stop-gate checks a modified tracked file" stop-gate.sh 2 "tests: 1 failed" "$(in_w)"
+rm -rf "$CL"
+
 # ---------- review-guard: spawn messages ----------
 spawn() { jq -cn --arg t "$1" --arg p "$2" '{tool_name: "Agent", tool_input: {subagent_type: $t, prompt: $p, description: "x"}}'; }
 expect "reviewer with the exact message" review-guard.sh 0 "" "$(spawn factory:factory-reviewer 'Review ticket #12')"

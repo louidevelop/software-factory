@@ -4,7 +4,10 @@
 #   1. While an attempt (`factory attempt`) is open in the session's checkout, the session may
 #      not end: it ends through `factory finish` or `factory block`. This is what keeps an
 #      unattended run, local or in the cloud, from stopping half-way without a word.
-#   2. Otherwise the agent may not finish a turn while the project's check command is red.
+#   2. Otherwise the agent may not finish a turn while the project's check command is red, if
+#      the checkout has changes of its own: a dirty tree, or commits no remote has. A session that
+#      changed nothing cannot have broken the check, and an idle run in a fresh cloud clone would
+#      otherwise have to install the project's dependencies just to be allowed to stop.
 set -u
 . "$(dirname "$0")/lib.sh"
 
@@ -47,7 +50,17 @@ if [ -z "$CHECK" ]; then
   exit 0
 fi
 
-if ! OUT=$(cd "$(factory_root)" && bash -c "$CHECK" 2>&1); then
+# Ignored files (installed dependencies, build output) do not count. Commits that were pushed do not
+# either: CI checks what reaches the remote. Outside git, or with no remote, the check runs.
+ROOT=$(factory_root)
+if git -C "$ROOT" rev-parse -q --verify HEAD >/dev/null 2>&1 &&
+  [ -z "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] &&
+  [ -n "$(git -C "$ROOT" for-each-ref --count=1 refs/remotes)" ] &&
+  [ -z "$(git -C "$ROOT" rev-list -1 HEAD --not --remotes 2>/dev/null)" ]; then
+  exit 0
+fi
+
+if ! OUT=$(cd "$ROOT" && bash -c "$CHECK" 2>&1); then
   {
     echo "\`$CHECK\` FAILED — fix it before finishing the turn. Never skip, weaken, or delete a failing test, lint rule, or check to make it pass."
     echo "--- last 60 lines ---"

@@ -63,6 +63,8 @@ comments() { # comments <n> — cached: selection and counting read them more th
 # live <n> — succeeds when the ticket's last attempt has not ended and is recent: it started
 # within run.staleMinutes, or its branch got a commit within them. (A commit's time, not the push's:
 # git has no push time, and an attempt pushes its work only when it ends.) Prints a reason.
+# The gate applies the same rule before it starts the cloud routine (liveReason in
+# classifier/notify.mjs); change both or neither.
 live() {
   local last b age tip
   last=$(comments "$1" | jq -c "$LAST_ATTEMPT") || return 1

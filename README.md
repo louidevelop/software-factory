@@ -69,7 +69,8 @@ When the layer itself changes, the next ticket start opens a "factory sync" PR (
 
 **In Claude's cloud (optional).** Tickets can also run with your computer off: a cloud routine on
 the repo does one attempt per run (`factory attempt`), and the gate starts it again after each
-merge and when a PR starts waiting for you; an hourly schedule is the backstop. The
+merge and when a PR starts waiting for you, unless another attempt is still running; an hourly
+schedule is the backstop. The
 factory-bootstrap skill walks you through it: the Claude GitHub App on the repo, a cloud
 environment, a routine with an API trigger, and the repo variable `FACTORY_ROUTINE_URL` and secret
 `FACTORY_ROUTINE_TOKEN` the gate fires it with.

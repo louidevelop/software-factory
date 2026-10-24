@@ -1,11 +1,11 @@
 name: Software factory gate
-description: Classify a PR's impact, label it, wait for the other checks, and merge when the gate passes (an owner's `merge` label for high impact) and check is green on the PR combined with the current base. Starts the cloud routine after a merge, and mentions the owners on a blocked ticket.
+description: Classify a PR's impact, label it, wait for the other checks, and merge when the gate passes (an owner's `merge` label for high impact) and check is green on the PR combined with the current base. Starts the cloud routine after a merge (unless an attempt is live), and mentions the owners on a blocked ticket.
 inputs:
   github-token:
     description: Token with actions/contents/pull-requests/issues write on the calling repo.
     default: ${{ github.token }}
   routine-url:
-    description: The cloud routine's /fire URL (FACTORY_ROUTINE_URL). With routine-token, the gate starts the routine after a merge and when a PR starts waiting for an owner. Empty = never.
+    description: The cloud routine's /fire URL (FACTORY_ROUTINE_URL). With routine-token, the gate starts the routine after a merge and when a PR starts waiting for an owner, unless an attempt is live. Empty = never.
     default: ""
   routine-token:
     description: The routine's /fire token (secret FACTORY_ROUTINE_TOKEN). Never logged.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BLOCK_MARKER, fireRequest, fireRoutine, mentionBody, needsBlockMention, needsRework } from "./notify.mjs";
+import { activeTicket, BLOCK_MARKER, fireRequest, fireRoutine, liveReason, mentionBody, needsBlockMention, needsRework, openAttempt } from "./notify.mjs";
 
 const URL = "https://api.anthropic.com/v1/claude_code/routines/trig_1/fire";
 const TOKEN = "sk-ant-secret-token";
@@ -99,4 +99,39 @@ test("blocked mention: not once the ticket is unblocked or closed", () => {
 
 test("mention body: the marker first, then every owner", () => {
   assert.equal(mentionBody(BLOCK_MARKER, ["a", "b"], "look"), `${BLOCK_MARKER}\n@a @b look`);
+});
+
+const ticket = (...labels) => ({ number: 7, state: "open", labels: ["agent-task", ...labels].map((name) => ({ name })) });
+
+test("live attempt: only open, in-progress or rework, unblocked agent tickets", () => {
+  assert.equal(activeTicket(ticket("in-progress")), true);
+  assert.equal(activeTicket(ticket("rework")), true);
+  assert.equal(activeTicket(ticket()), false, "ready, not started");
+  assert.equal(activeTicket(ticket("in-progress", "blocked")), false);
+  assert.equal(activeTicket({ ...ticket("in-progress"), state: "closed" }), false);
+  assert.equal(activeTicket({ ...ticket("in-progress"), pull_request: {} }), false, "a PR is not a ticket");
+  assert.equal(activeTicket({ ...ticket("in-progress"), labels: [{ name: "in-progress" }] }), false, "not an agent task");
+});
+
+const started = (k, created_at, branch = "ticket/7-x") => ({ body: `<!-- factory:attempt ${k} branch=${branch} -->\n**Factory attempt ${k} of 3** started`, created_at });
+const ended = (c, k, outcome) => ({ ...c, body: `${c.body}\n\n<!-- factory:attempt-end ${k} ${outcome} -->\n**Ended: ${outcome}.**` });
+
+test("live attempt: the last attempt record, while it has not ended", () => {
+  assert.equal(openAttempt([]), null);
+  assert.equal(openAttempt([{ body: "a comment" }]), null);
+  assert.deepEqual(openAttempt([started(1, T1)]), { branch: "ticket/7-x", startedAt: T1 });
+  assert.equal(openAttempt([started(1, T1), { body: "later chatter" }]).startedAt, T1, "other comments do not count");
+  for (const outcome of ["finished", "unfinished", "blocked"]) assert.equal(openAttempt([ended(started(1, T1), 1, outcome)]), null, outcome);
+  assert.deepEqual(openAttempt([ended(started(1, T1), 1, "unfinished"), started(2, T2)]), { branch: "ticket/7-x", startedAt: T2 });
+});
+
+test("live attempt: started, or got a commit, within run.staleMinutes", () => {
+  const now = Date.parse(T3);
+  const attempt = { branch: "ticket/7-x", startedAt: T2 }; // 60 min before T3
+  assert.match(liveReason({ ticket: 7, attempt, now }), /#7's attempt started 60 min ago/, "default: 120 min");
+  assert.equal(liveReason({ ticket: 7, attempt, now, staleMinutes: 60 }), null, "stale exactly at the limit");
+  assert.equal(liveReason({ ticket: 7, attempt: { ...attempt, startedAt: T1 }, now, staleMinutes: 90 }), null);
+  assert.match(liveReason({ ticket: 7, attempt: { ...attempt, startedAt: T1 }, branchCommitAt: "2026-01-01T11:50:00Z", now, staleMinutes: 90 }),
+    /branch ticket\/7-x got a commit 10 min ago/);
+  assert.equal(liveReason({ ticket: 7, attempt: { ...attempt, startedAt: undefined }, now }), null, "no time, not live");
 });

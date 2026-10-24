@@ -8,7 +8,10 @@ import { validateConfig } from "./config.mjs";
 import { gate, MERGE_LABEL } from "./gate.mjs";
 import { client } from "./github.mjs";
 import { mergeCheck } from "./mergecheck.mjs";
-import { BLOCK_MARKER, BLOCKED_LABEL, fireRoutine, mentionBody, needsBlockMention, needsRework, REWORK_LABEL } from "./notify.mjs";
+import {
+  activeTicket, BLOCK_MARKER, BLOCKED_LABEL, fireRequest, fireRoutine, liveReason, mentionBody, needsBlockMention, needsRework, openAttempt,
+  REWORK_LABEL,
+} from "./notify.mjs";
 import { classify, linkedIssue } from "./rules.mjs";
 
 const MARKER = "<!-- factory:gate -->";
@@ -22,14 +25,41 @@ const POLL_MS = 15_000;
 
 const token = process.env["INPUT_GITHUB-TOKEN"] || process.env.GITHUB_TOKEN;
 const repo = process.env.GITHUB_REPOSITORY;
-const gh = client({ token, api: process.env.GITHUB_API_URL, repo });
 const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
 const number = event.pull_request?.number;
 const R = `/repos/${repo}`;
 
 const log = (...a) => console.log("[factory gate]", ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const fire = (text) => fireRoutine({ url: process.env["INPUT_ROUTINE-URL"], token: process.env["INPUT_ROUTINE-TOKEN"], text, log });
+const gh = client({ token, api: process.env.GITHUB_API_URL, repo, log });
+const routine = { url: process.env["INPUT_ROUTINE-URL"], token: process.env["INPUT_ROUTINE-TOKEN"] };
+
+// The attempt that is live in this repository, if any (see liveReason): why it is, or null.
+async function liveAttempt(staleMinutes) {
+  const tickets = (await gh.paginate(`${R}/issues?labels=agent-task&state=open`)).filter(activeTicket);
+  for (const t of tickets) {
+    const attempt = openAttempt(await gh.paginate(`${R}/issues/${t.number}/comments`));
+    if (!attempt) continue;
+    let why = liveReason({ ticket: t.number, attempt, staleMinutes });
+    if (!why && attempt.branch) {
+      const branch = await gh.get(`${R}/branches/${attempt.branch.split("/").map(encodeURIComponent).join("/")}`).catch(() => null);
+      why = liveReason({ ticket: t.number, attempt, branchCommitAt: branch?.commit?.commit?.committer?.date, staleMinutes });
+    }
+    if (why) return why;
+  }
+  return null;
+}
+
+// Start the cloud routine's next run, unless an attempt is live: that attempt's own PR starts the
+// next run when it merges or starts waiting for an owner, and the hourly schedule covers an attempt
+// that ends without one. A failed look starts the run anyway; at worst it finds the repository busy.
+async function fire(text, staleMinutes) {
+  if (fireRequest({ ...routine, text })) {
+    const busy = await liveAttempt(staleMinutes).catch((err) => log(`could not look for a live attempt: ${err.message}`));
+    if (busy) return log(`routine not started: ${busy}; a run is already working`);
+  }
+  await fireRoutine({ ...routine, text, log });
+}
 
 async function readBaseConfig(baseRef) {
   const file = await gh.get(`${R}/contents/.factory/config.json?ref=${encodeURIComponent(baseRef)}`);
@@ -75,11 +105,11 @@ async function mentionOwners(owners, text) {
 // Ask once per PR; later pushes that drop the label ask again on their own. The PR now waits for
 // the owner, so the routine is started too: its run's notification reaches the owner's phone, and
 // the run can take on other work meanwhile.
-async function askOwners(owners, base) {
+async function askOwners(owners, base, staleMinutes) {
   const comments = await gh.paginate(`${R}/issues/${number}/comments`);
   if (comments.some((c) => c.body?.startsWith(ASK_MARKER))) return;
   await mentionOwners(owners, `this PR is high impact and its checks are green. Review it, then add the \`${MERGE_LABEL}\` label: the gate checks it against the current \`${base}\` and merges it. The gate comment says why it is high impact.`);
-  await fire(`PR #${number} is high impact and waits for an owner's \`${MERGE_LABEL}\` label`);
+  await fire(`PR #${number} is high impact and waits for an owner's \`${MERGE_LABEL}\` label`, staleMinutes);
 }
 
 // The PR cannot merge as it stands (conflict, or red on the current base): label its ticket
@@ -175,6 +205,7 @@ async function main() {
     const ticket = issue ? await gh.get(`${R}/issues/${issue}`).then((t) => ({ number: issue, body: t.body ?? "" })).catch(() => null) : null;
     result = classify({ config, files, pr: { body: pr.body ?? "", draft: pr.draft }, ticket });
     result.owners = config.owners;
+    result.staleMinutes = config.run?.staleMinutes;
   } catch (err) {
     // Without a readable config the repo's owner is the one to ask.
     result = { risk: "high", reasons: [{ rule: "error", detail: `the classifier failed, so the PR is high impact: ${err.message}`, files: [] }], owners: [repo.split("/")[0]] };
@@ -200,7 +231,7 @@ async function main() {
       await gh.del(`${R}/issues/${number}/labels/${encodeURIComponent(MERGE_LABEL)}`).catch(() => {});
       await mentionOwners(result.owners, `new commits were pushed after the \`${MERGE_LABEL}\` label was added, so the gate removed it. Review the new commits and add it again to merge.`);
     } else if (decision.needsOwner) {
-      await askOwners(result.owners, pr.base.ref);
+      await askOwners(result.owners, pr.base.ref, result.staleMinutes);
     }
     if (!decision.pass) process.exitCode = 1;
     return;
@@ -222,7 +253,7 @@ async function main() {
   // The ticket is done: drop the gate's rework label (and `blocked`, which the gate used to set).
   const issue = linkedIssue(pr.body ?? "");
   for (const label of issue ? [REWORK_LABEL, BLOCKED_LABEL] : []) await gh.del(`${R}/issues/${issue}/labels/${label}`).catch(() => {});
-  await fire(`PR #${number} merged${issue ? ` (ticket #${issue})` : ""}`);
+  await fire(`PR #${number} merged${issue ? ` (ticket #${issue})` : ""}`, result.staleMinutes);
   // The merge API cannot pin the base, so a merge that slipped in after the last read of it
   // means this squash landed on a base the check did not see. Say so; pickup checks the base.
   const parent = merged?.sha ? (await gh.get(`${R}/commits/${merged.sha}`)).parents?.[0]?.sha : mc.baseSha;

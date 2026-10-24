@@ -79,3 +79,31 @@ export async function fireRoutine({ url, token, text, fetch = globalThis.fetch, 
     return false;
   }
 }
+
+// Runs go one at a time per repository, so the gate does not start the routine while an attempt is
+// live: the new run would find the repository busy and do nothing. The same rule as `live` in
+// `factory attempt` (scripts/cmd/attempt.sh); change both or neither. A live attempt is the last
+// attempt record (see "Attempts" in scripts/common.sh) of an open agent-task ticket that is
+// in-progress or rework and not blocked, when that attempt has not ended and started, or got a
+// commit on its branch, within run.staleMinutes.
+export const STALE_MINUTES = 120;
+
+export function activeTicket(issue) {
+  return issue.state === "open" && !issue.pull_request && has(issue, "agent-task") &&
+    (has(issue, "in-progress") || has(issue, REWORK_LABEL)) && !has(issue, BLOCKED_LABEL);
+}
+
+// The ticket's last attempt when it has not ended: { branch, startedAt }; null otherwise.
+export function openAttempt(comments) {
+  const last = comments.filter((c) => /<!-- factory:attempt [0-9]+/.test(c.body ?? "")).at(-1);
+  if (!last || last.body.includes("<!-- factory:attempt-end ")) return null;
+  return { branch: last.body.match(/<!-- factory:attempt [0-9]+ branch=([^ ]+) -->/)?.[1] ?? null, startedAt: last.created_at };
+}
+
+// → why the attempt counts as live, or null. branchCommitAt: the time of its branch's last commit.
+export function liveReason({ ticket, attempt, branchCommitAt = null, now = Date.now(), staleMinutes = STALE_MINUTES }) {
+  const age = (t) => (t ? Math.floor((now - Date.parse(t)) / 60_000) : NaN);
+  if (age(attempt.startedAt) < staleMinutes) return `#${ticket}'s attempt started ${age(attempt.startedAt)} min ago`;
+  if (age(branchCommitAt) < staleMinutes) return `#${ticket}'s branch ${attempt.branch} got a commit ${age(branchCommitAt)} min ago`;
+  return null;
+}
