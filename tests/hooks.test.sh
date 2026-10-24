@@ -60,6 +60,18 @@ for cmd in \
   'ls -la' 'migrate --local' 'gh pr create --fill' 'gh pr view 3' 'gh pr update-branch 3'; do
   expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
 done
+
+# ---------- block-dangerous: the merge label is the owner's ----------
+for cmd in \
+  'gh pr edit 3 --add-label merge' 'gh issue edit 3 --add-label "risk:low,merge"' 'gh pr edit 3 --add-label=merge' \
+  'gh pr create --fill --label merge' 'gh pr create --fill -l merge' 'gh api repos/o/r/issues/3/labels -f "labels[]=merge"'; do
+  expect "blocks: $cmd" block-dangerous.sh 2 "merge label" "$(bash_input "$cmd")"
+done
+for cmd in \
+  'gh issue edit 3 --add-label in-progress' 'gh pr list --label merge' 'gh pr edit 3 --add-label merged-docs' \
+  'gh issue edit 3 --add-label blocked --remove-label in-progress'; do
+  expect "allows: $cmd" block-dangerous.sh 0 "" "$(bash_input "$cmd")"
+done
 expect "allows Read .env.example" block-dangerous.sh 0 "" "$(file_input Read "$PROJECT/.env.example")"
 expect "allows Read src file" block-dangerous.sh 0 "" "$(file_input Read "$PROJECT/src/a.py")"
 

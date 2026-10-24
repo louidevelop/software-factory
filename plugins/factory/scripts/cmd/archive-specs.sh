@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # archive-specs — when every ticket of a feature is closed, open an "Archive spec" PR that moves
 # the spec to docs/specs/archive/, stamps it as history, and appends what was actually built.
-# Runs from `factory start` and at the end of `factory run`, as the machine user, so the PR goes
-# through the gate like any other (it touches docs/specs/, so it is always the owner's sign-off).
+# Runs from `factory start` and at the end of `factory run`, so the PR goes through the gate like
+# any other (it touches docs/specs/, so it always waits for the owner's `merge` label: their sign-off).
 #   factory archive-specs
 set -u
 # shellcheck source=../common.sh
@@ -72,8 +72,8 @@ for P in $(gh issue list --label feature --state open --limit 100 --json number 
 
 Every ticket of this feature is closed. This moves \`$SPEC\` to \`docs/specs/archive/\`, marks it as
 history, and appends what was actually built (each ticket's PR and the decisions its implementer
-listed). Approving it is the owner's sign-off that the feature is done; it always needs that
-approval because it touches \`docs/specs/\`.
+listed). Adding the \`merge\` label is the owner's sign-off that the feature is done; it always
+needs that because it touches \`docs/specs/\`.
 
 ## Verification
 - Spec moved and stamped; \"As built\" lists every sub-issue of #$P.

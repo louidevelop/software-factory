@@ -8,7 +8,7 @@
   "properties": {
     "version": { "const": 1 },
     "owners": {
-      "description": "GitHub logins whose approval satisfies the gate for high-impact PRs. The machine user must never be listed.",
+      "description": "GitHub logins the gate assigns and mentions on high-impact PRs; only their `merge` label lets such a PR merge.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1

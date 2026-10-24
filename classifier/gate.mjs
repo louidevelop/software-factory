@@ -1,38 +1,41 @@
-// The gate decision. Pure: gate(input) → { pass, merge, summary }.
-// Low impact passes when every other check is green. High impact additionally needs an
-// approval from an OWNER (config.owners, read from the base branch) on the current head
-// commit — the machine user has write access, so "any approval" would let it wave its own
-// work through. An owner's later "changes requested" overrides their earlier approval.
+// The gate decision. Pure: gate(input) → { pass, merge, needsOwner, summary }.
+// Low impact passes when every other check is green. High impact additionally needs an OWNER's
+// go-ahead (config.owners, read from the base branch): the `merge` label, added by an owner.
+// Not a review approval: the owner and the agents act as one GitHub account, and GitHub never
+// lets the author of a PR approve it. Agents are kept from adding the label by the blocklist
+// hook, and a push after the label removes it (index.mjs), so the go-ahead always covers the
+// commits the owner looked at.
 // Whether the PR is behind its base does not matter here: before merging, the caller checks the
 // PR combined with the current base (mergecheck.mjs).
 //
-// input = { risk, owners, headSha, draft, reviews: [{ user, state, commit_id, submitted_at }],
+// input = { risk, owners, draft, labels: [name], events: [{ event, label, actor, created_at }],
 //           checks: { pending: [name], failed: [name], passed: [name] } }
 
-export function ownerApproval(owners, reviews, headSha) {
+export const MERGE_LABEL = "merge";
+
+// Whoever added the label most recently decides whether it counts.
+export function ownerGoAhead(owners, labels, events) {
+  if (!labels.includes(MERGE_LABEL)) return { ok: false, why: `waiting for an owner to add the \`${MERGE_LABEL}\` label` };
   const lower = new Set(owners.map((o) => o.toLowerCase()));
-  const latest = new Map();
-  for (const r of [...reviews].sort((a, b) => (a.submitted_at ?? "").localeCompare(b.submitted_at ?? ""))) {
-    const who = r.user?.toLowerCase();
-    if (!who || !lower.has(who)) continue;
-    if (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED" || r.state === "DISMISSED") latest.set(who, r);
+  const last = events
+    .filter((e) => e.event === "labeled" && e.label === MERGE_LABEL)
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))
+    .at(-1);
+  if (!last?.actor || !lower.has(last.actor.toLowerCase())) {
+    return { ok: false, why: `the \`${MERGE_LABEL}\` label was added by ${last?.actor ?? "an unknown account"}, not an owner` };
   }
-  const states = [...latest.values()];
-  if (states.some((r) => r.state === "CHANGES_REQUESTED")) return { approved: false, why: "an owner requested changes" };
-  const fresh = states.find((r) => r.state === "APPROVED" && r.commit_id === headSha);
-  if (fresh) return { approved: true, why: `approved by ${fresh.user}` };
-  if (states.some((r) => r.state === "APPROVED")) return { approved: false, why: "the owner approval is for an older commit" };
-  return { approved: false, why: "waiting for an owner's approval" };
+  return { ok: true, why: `\`${MERGE_LABEL}\` added by ${last.actor}` };
 }
 
-export function gate({ risk, owners, headSha, draft, reviews, checks }) {
+export function gate({ risk, owners, draft, labels, events, checks }) {
   if (checks.failed.length) return { pass: false, merge: false, summary: `checks failed: ${checks.failed.join(", ")}` };
   if (checks.pending.length) return { pass: false, merge: false, summary: `checks still running: ${checks.pending.join(", ")}` };
   if (checks.passed.length === 0) return { pass: false, merge: false, summary: "no check ran on this commit; the project's check workflow must run on pull requests" };
-  if (risk === "high") {
-    const a = ownerApproval(owners, reviews, headSha);
-    if (!a.approved) return { pass: false, merge: false, summary: `high impact — ${a.why}` };
-  }
   if (draft) return { pass: true, merge: false, summary: "draft PR — not merged until ready for review" };
-  return { pass: true, merge: true, summary: risk === "high" ? "high impact, approved by an owner — merging" : "low impact, checks green — merging" };
+  if (risk === "high") {
+    const a = ownerGoAhead(owners, labels, events);
+    if (!a.ok) return { pass: false, merge: false, needsOwner: true, summary: `high impact — ${a.why}` };
+    return { pass: true, merge: true, summary: `high impact, ${a.why} — merging` };
+  }
+  return { pass: true, merge: true, summary: "low impact, checks green — merging" };
 }

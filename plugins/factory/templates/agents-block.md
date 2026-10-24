@@ -37,4 +37,5 @@ ticket PR.
 - A run is done when: the check is green, the tree is clean, and the PR description has a
   proof line for every acceptance criterion and lists every decision the ticket did not settle.
 - Fill every section of the PR template. Use `factory open-pr`; never open, approve, or merge
-  a PR by hand. The factory gate merges or asks the human.
+  a PR by hand, and never add the `merge` label: that is the owner's go-ahead. The factory gate
+  merges or asks the human.

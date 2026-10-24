@@ -5,8 +5,7 @@
 #   factory run [<parent-issue>]
 # Each attempt is a brand-new context in auto permission mode with prompts auto-denied; the
 # plugin's hooks are the second layer and keep the review subagents unbriefed and read-only.
-# Run it as the machine user (GH_TOKEN), never as an owner. Stops when nothing is ready (or the
-# base branch is red). This loop is the only part of the factory that needs headless claude -p.
+# Stops when nothing is ready (or the base branch is red). This loop is the only part of the factory that needs headless claude -p.
 set -u
 # shellcheck source=../common.sh
 . "$FACTORY_SCRIPTS/common.sh"
@@ -20,12 +19,6 @@ MAX=$(jq -r '.run.maxAttempts // 3' "$CONFIG")
 MODEL=$(jq -r '.run.model // empty' "$CONFIG")
 TURNS=$(jq -r '.run.maxTurns // empty' "$CONFIG")
 FACTORY="$FACTORY_SCRIPTS/factory"
-
-ME=$(gh api user -q .login 2>/dev/null)
-if jq -e --arg me "$ME" '.owners | map(ascii_downcase) | index($me | ascii_downcase)' "$CONFIG" >/dev/null; then
-  warn "gh acts as an owner ($ME). Unattended runs should use the machine user: export GH_TOKEN=<machine user token>."
-  warn "Continuing, but PRs opened as an owner cannot be approved by that owner."
-fi
 
 CLAUDE_ARGS=(--permission-mode auto --permission-prompts none)
 [ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")

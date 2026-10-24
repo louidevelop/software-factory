@@ -1,14 +1,13 @@
 # Managed by the software factory (factory sync). Do not edit — changes here arrive as a
 # "factory sync" PR. The gate classifies every PR, waits for the project's own checks, and
-# merges low-impact PRs (or high-impact ones an owner approved) once `check` is green on the PR
-# combined with the current base — it dispatches check.yml for that. Agents never merge.
+# merges low-impact PRs (high-impact ones once an owner adds the `merge` label) when `check` is
+# green on the PR combined with the current base — it dispatches check.yml for that. Agents never
+# merge or add that label.
 name: gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
-  pull_request_review:
-    types: [submitted, dismissed]
+    types: [opened, synchronize, reopened, edited, ready_for_review, labeled]
 
 permissions:
   actions: write
@@ -24,8 +23,11 @@ concurrency:
 
 jobs:
   gate:
-    # Same-repo branches only: a fork's PR never gets a write token.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Same-repo branches only: a fork's PR never gets a write token. Of the labels, only the
+    # owner's go-ahead starts a run.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'labeled' || github.event.label.name == 'merge')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

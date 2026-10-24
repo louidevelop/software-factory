@@ -7,7 +7,7 @@
 // Someone with a real token had to, and PRs sat behind until they did. A workflow_dispatch is
 // the one thing GITHUB_TOKEN may start, so the gate builds the combination on a scratch branch
 // and dispatches the project's check workflow on it. The PR branch never changes, so an owner's
-// approval of the head commit stays valid.
+// go-ahead (the `merge` label) stays valid.
 //
 // Merges must not interleave: after a green run the base is read again, and if it moved the
 // combination is rebuilt and checked again. The merge API cannot pin the base commit, so a merge

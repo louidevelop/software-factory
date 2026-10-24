@@ -32,7 +32,7 @@ continue until every one is answered:
   database (these go in `block`).
 - Deploy commands (these go in `block`).
 - UI or not. If yes: where design tokens live, and whether a component kit exists.
-- GitHub repo name, and the machine user's login if it exists yet.
+- GitHub repo name.
 
 ## 2. Choose a tool per contract slot — the user confirms
 
@@ -57,7 +57,7 @@ flags or config keys from memory.
 Write, adapting the templates:
 
 - `.factory/config.json` — from `templates/config.example.json`; schema in `templates/config.schema.json`.
-  `owners` = the user's GitHub login (never the machine user). Fill `paths.*` from the interview;
+  `owners` = the user's GitHub login. Fill `paths.*` from the interview;
   add every linter/fence config and check script to `paths.guardrails`.
 - `AGENTS.md` — from `templates/AGENTS.md`: product line, stack, layer chain with one bullet per
   layer, fences, conventions. Keep only judgment calls. Leave the `factory:begin/end` markers.
@@ -83,7 +83,7 @@ Run `check`; it must be green.
 ## 5. GitHub
 
 Create the repo if needed (private by default). Run `scripts/factory github-setup` (dry run), show the
-user the output, then `--apply` (add `--machine-user <login>` when known). This runs as the OWNER.
+user the output, then `--apply`. This runs as the OWNER.
 Branch protection fails on private repos without GitHub Pro; the script says so — tell the user what
 that means (the gate still merges, GitHub does not hard-enforce it).
 
@@ -99,7 +99,8 @@ Report each probe with its actual output. Undo every probe's change afterwards.
 4. Edit a file into a state the fix command cannot repair → the after-edit hook's message reaches you.
 5. A throwaway file that imports across a fence → `check` fails naming the fence. Delete it.
 6. Push → CI runs `check` and it is green.
-7. (Needs the gate, phase 3+) A PR that changes the lockfile → labelled `risk:high`, not merged.
+7. (Needs the gate) A PR that changes the lockfile → labelled `risk:high`, assigned to the owner with
+   a comment mentioning them, not merged until the owner adds the `merge` label.
 8. (Needs the gate) A trivial PR with a ticket → `risk:low`, merged by the gate.
 
 Probes 1–4 need the hooks loaded: they fire only in a session started after the plugin is enabled.

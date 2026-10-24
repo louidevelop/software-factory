@@ -73,7 +73,13 @@ fi
 # ---------- Merging is the gate's job ----------
 # An agent never merges, approves, or bypasses the factory gate, whoever it is logged in as.
 if matches '(^|[ ;&|(])gh +pr +(merge|review)\b|gh +api\b.*/pulls/[0-9]+/(merge|reviews)\b'; then
-  block "merging or reviewing a PR. The factory gate merges; a human approves."
+  block "merging or reviewing a PR. The factory gate merges; the owner gives the go-ahead."
+fi
+# The `merge` label is the owner's go-ahead for a high-impact PR, and agents act as the owner's
+# account, so the gate cannot tell who added it: only this keeps an agent from adding it.
+if matches 'gh +(pr|issue) +(edit|create)\b[^;&|]*(--add-label|--label|-l)( +|=)["'"'"']?([^ "'"'"']*,)?merge(["'"'"', ]|$)' ||
+  matches 'gh +api\b[^;&|]*/labels\b[^;&|]*\bmerge\b'; then
+  block "adding the merge label. Only the owner gives a high-impact PR the go-ahead."
 fi
 
 # ---------- Filesystem ----------

@@ -46,14 +46,11 @@ echo "github"
 if gh auth status >/dev/null 2>&1; then
   ME=$(gh api user -q .login 2>/dev/null)
   ok "gh authenticated as $ME"
-  if [ -f "$CONFIG" ] && jq -e --arg me "$ME" '.owners | index($me)' "$CONFIG" >/dev/null 2>&1; then
-    note "gh acts as an owner ($ME). Agent runs must use the machine user: export GH_TOKEN=<machine user token>"
-  fi
   SLUG=$(cd "$ROOT" && factory_repo_slug)
   if [ -n "$SLUG" ]; then
     ok "repo $SLUG"
     LABELS=$(gh label list -R "$SLUG" --limit 200 --json name -q '.[].name' 2>/dev/null)
-    for l in agent-task in-progress blocked risk:low risk:high; do
+    for l in agent-task in-progress blocked risk:low risk:high merge; do
       grep -qx "$l" <<<"$LABELS" && ok "label $l" || bad "label $l missing (factory github-setup --apply)"
     done
   else

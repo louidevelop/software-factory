@@ -5,7 +5,7 @@ Guardrails and pipeline for agentic coding, shared across projects:
 ```
 feature-spec ─▶ create-tickets ─▶ factory start ─▶ implement (hooks) ─▶ factory review ─▶ factory open-pr ─▶ gate
   spec PR,        sub-issues,       lock, worktree,   check gate, fix     reviewer + one       Local review      classify, label,
-  owner approves  blocked-by        green base        after edit,         judge per finding    attached          merge low / wait
+  owner: merge    blocked-by        green base        after edit,         judge per finding    attached          merge low / wait
                                                        blocklist                                                  for owner on high
 ```
 
@@ -22,7 +22,7 @@ Tech-general: the factory defines a contract each project fills with its own sta
 | `plugins/factory/agents/` | `factory-reviewer`, `factory-judge`, `factory-resolver` subagents — triggered by the main agent, never briefed by it |
 | `plugins/factory/prompts/` | the implementation prompt for unattended runs |
 | `plugins/factory/templates/` | config, `AGENTS.md` + managed block, settings, spec, ticket, PR, gate workflow, shim |
-| `classifier/` | the gate: impact rules, owner-approval gate, GitHub Action (`uses: louidevelop/software-factory/classifier@main`) |
+| `classifier/` | the gate: impact rules, owner go-ahead (`merge` label), merge-time check, GitHub Action (`uses: louidevelop/software-factory/classifier@main`) |
 | `examples/` | outfit-assistant and byggtalk as worked examples of the contract |
 
 ## Using it in a project
@@ -30,12 +30,14 @@ Tech-general: the factory defines a contract each project fills with its own sta
 1. In Claude Code: `/plugin marketplace add louidevelop/software-factory`, install `factory@software-factory`.
 2. New project: ask for the **factory-bootstrap** skill. It interviews, picks a tool per slot,
    scaffolds, sets up GitHub, and proves every guardrail fires.
-3. Features: **feature-spec** → owner approves the spec PR → **create-tickets** for that spec.
+3. Features: **feature-spec** → owner gives the spec PR the `merge` label → **create-tickets** for that spec.
    Small work: **create-tickets** directly.
-4. Work: **start-ticket** (interactive) or **run-tickets** (`factory run`, unattended, as the machine user).
+4. Work: **start-ticket** (interactive) or **run-tickets** (`factory run`, unattended).
+5. Review: the gate merges low-impact PRs itself. On a high-impact PR it assigns you and mentions
+   you; review it and add the `merge` label, and the gate merges it.
 
-Prerequisites on a project machine: bash (3.2+), git, gh, jq, claude. The machine user needs a
-classic token with `repo` scope (fine-grained tokens cannot reach repos where it is a collaborator).
+Prerequisites on a project machine: bash (3.2+), git, gh, jq, claude. Agents act through your own
+`gh` login; the blocklist keeps them from merging, reviewing, or adding the `merge` label.
 
 ## Working on the factory
 

@@ -11,7 +11,7 @@ usage() {
 usage: factory <command> [args]
 
   doctor                 check prerequisites, config, and GitHub access for this project
-  github-setup [--machine-user <login>] [--apply]
+  github-setup [--apply]
                          labels, merge settings, branch protection (shows changes first)
   sync [--apply | --pr]  compare factory-managed files with the latest factory;
                          --apply writes them, --pr opens a "factory sync" PR

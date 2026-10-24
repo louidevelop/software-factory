@@ -10,8 +10,6 @@ description: Run the factory's unattended loop over ready tickets — one at a t
 
 Before starting, confirm with `$FACTORY doctor` from the project root:
 - prerequisites and config are green;
-- `gh` acts as the MACHINE USER (`GH_TOKEN` set to its token). As an owner, the owner cannot approve
-  the high-impact PRs the loop opens, and agents would act with owner rights;
 - headless `claude -p` is logged in (`claude -p "say ok"` answers).
 
 Then start the loop in the background (it can run for hours):
