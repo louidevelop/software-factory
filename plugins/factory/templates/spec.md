@@ -43,7 +43,3 @@ Status: active · Parent issue: #{{PARENT}}
 ## Out of scope
 
 -
-
-## Ticket breakdown
-
-<!-- Filled by the create-tickets skill: one line per ticket, in order, with dependencies. -->

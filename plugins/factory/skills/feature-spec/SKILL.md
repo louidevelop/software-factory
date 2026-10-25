@@ -43,7 +43,6 @@ Fill `templates/spec.md`:
   yourself, grounded in `AGENTS.md`; the human approves it in the PR. Otherwise delete the section.
 - **Verification**: split Tested / Observed honestly. Every Observed line will make its ticket's
   PR high impact — that is intended, a human must look.
-- Leave **Ticket breakdown** empty; create-tickets fills it.
 - Nothing may depend on this conversation: the reader has only the repo and the spec.
 
 ## 5. Open the spec PR and the tracking issue

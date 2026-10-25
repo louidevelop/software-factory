@@ -23,8 +23,8 @@ Plugin paths (`templates/…`, `scripts/factory`) are two directories up from th
 5. For each ticket, write the body (below) to a temp file and run:
    `scripts/factory tickets create "<imperative title>" <body-file> --parent <spec parent> [--blocked-by <n>]...`
    Create them in order so `--blocked-by` can reference earlier numbers.
-6. Update the spec's **Ticket breakdown** with `#N — title (blocked by #M)` lines in a small PR
-   (`docs/specs/` → owner-reviewed). Report every ticket URL.
+6. Report every ticket URL. The spec file is not edited: the parent issue's sub-issues are the
+   breakdown, and archiving the spec records what was built.
 
 ## Mode B — standalone (small work, no spec)
 
