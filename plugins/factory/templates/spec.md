@@ -26,7 +26,9 @@ Status: active · Parent issue: #{{PARENT}}
 ## Prerequisites
 
 <!-- What only a human can provide (API keys, recorded fixtures, accounts, a verified domain).
-     Each becomes a checkbox on the tickets that need it. Delete when none. -->
+     Each becomes a checkbox on the tickets whose implementation or tests need it. What only an
+     Observed check needs is named in that Observed line instead: a prerequisite blocks the
+     ticket until the human ticks it. Delete when none. -->
 
 ## Verification
 

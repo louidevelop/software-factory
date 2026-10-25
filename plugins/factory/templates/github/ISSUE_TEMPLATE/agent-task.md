@@ -43,8 +43,10 @@ Spec: <!-- docs/specs/NNN-feature.md § section, or "none" for a standalone tick
 
 ## Prerequisites
 
-<!-- Human-only inputs. The human ticks each box; the agent checks files itself but never
-     inspects secrets. Unticked → the ticket blocks. Delete the section when none. -->
+<!-- Human-only inputs the agent needs to implement or test this ticket. The human ticks each box;
+     the agent checks files itself but never inspects secrets. Unticked → the ticket blocks.
+     What only an Observed check needs (a real key for a live run) goes in that Observed line,
+     never here. Delete the section when none. -->
 
 - [ ] …
 

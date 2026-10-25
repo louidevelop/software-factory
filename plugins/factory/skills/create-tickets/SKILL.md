@@ -49,8 +49,11 @@ Fill `templates/github/ISSUE_TEMPLATE/agent-task.md` (it is also the repo's issu
   will create are fine; say so.
 - **Decisions** — every answer, plus the file to copy the pattern from. What the user gets, never
   how the code does it.
-- **Prerequisites** — unticked checkboxes for what only a human provides (keys, fixtures). The human
-  ticks them; the run blocks while any is unticked. Delete the section when none.
+- **Prerequisites** — unticked checkboxes for what only a human provides (keys, fixtures) AND the
+  agent needs to implement or test the ticket. The human ticks them; the run blocks while any is
+  unticked. What only the human's own Observed check needs (a real API key for a live run) is never
+  a prerequisite: it would block a ticket the agent can do without it. Name it in that Observed
+  line instead. Delete the section when none.
 - **Out of scope** — explicit.
 
 No implementation steps. Nothing that restates `AGENTS.md`. Nothing that depends on this conversation.
