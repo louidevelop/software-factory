@@ -51,8 +51,8 @@ async function liveAttempt(staleMinutes) {
 }
 
 // Start the cloud routine's next run, unless an attempt is live: that attempt's own PR starts the
-// next run when it merges or starts waiting for an owner, and the hourly schedule covers an attempt
-// that ends without one. A failed look starts the run anyway; at worst it finds the repository busy.
+// next run when it merges or starts waiting for an owner, and the routine's schedule covers an
+// attempt that ends without one. A failed look starts the run anyway; at worst it finds the repository busy.
 async function fire(text, staleMinutes) {
   if (fireRequest({ ...routine, text })) {
     const busy = await liveAttempt(staleMinutes).catch((err) => log(`could not look for a live attempt: ${err.message}`));

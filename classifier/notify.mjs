@@ -53,8 +53,8 @@ export function fireRequest({ url, token, text }) {
   };
 }
 
-// Never throws and never fails the gate: a missed fire is logged, and the routine's hourly
-// schedule is the backstop. Never logs the token. → true when the routine accepted the run.
+// Never throws and never fails the gate: a missed fire is logged, and the routine's schedule is
+// the fallback. Never logs the token. → true when the routine accepted the run.
 export async function fireRoutine({ url, token, text, fetch = globalThis.fetch, log = () => {}, timeoutMs = 15_000 }) {
   const req = fireRequest({ url, token, text });
   if (!req) {
@@ -69,13 +69,13 @@ export async function fireRoutine({ url, token, text, fetch = globalThis.fetch, 
   try {
     const res = await fetch(req.url, { ...req.init, signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) {
-      log(`routine not started: /fire answered HTTP ${res.status}; the hourly schedule picks the work up`);
+      log(`routine not started: /fire answered HTTP ${res.status}; the routine's schedule picks the work up`);
       return false;
     }
     log(`routine started: ${text}`);
     return true;
   } catch (err) {
-    log(`routine not started: ${String(err?.message ?? err).replaceAll(token, "***")}; the hourly schedule picks the work up`);
+    log(`routine not started: ${String(err?.message ?? err).replaceAll(token, "***")}; the routine's schedule picks the work up`);
     return false;
   }
 }

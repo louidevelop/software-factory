@@ -145,9 +145,10 @@ GitHub and claude.ai accounts.
    - Prompt, one stable line, for example: "Run `.factory/bin/factory attempt` and follow its
      output exactly. If it says there is nothing to do, finish. Send me a push notification when a
      ticket blocks or a feature is done."
-   - Triggers: an **API** trigger and an **hourly** schedule. No GitHub trigger: the gate starts the
-     routine itself, and a GitHub trigger never fires for the gate's merges anyway (they are made
-     with `GITHUB_TOKEN`). The hourly run is the backstop when a start is missed.
+   - Triggers: an **API** trigger and a schedule, as often as the user likes: the scheduled runs
+     are only the fallback for a missed start. No GitHub trigger: the gate starts the routine
+     itself, and a GitHub trigger never fires for the gate's merges anyway (they are made with
+     `GITHUB_TOKEN`).
    - Connectors: remove all of them. The factory reaches GitHub with `gh api` and needs nothing else.
    - The API trigger shows a fire URL and a token. The token is shown once.
 4. **Variable and secret.** Give the user these two commands, with this repo's `owner/name`
