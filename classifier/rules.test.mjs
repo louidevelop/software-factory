@@ -97,6 +97,32 @@ test("several rules fire together; nothing lowers", () => {
   assert.deepEqual(rules(r), ["dependencies", "migrations", "guardrails"]);
 });
 
+test("each rule has a level; the risk is the highest that fired", () => {
+  const ticket = { number: 7, body: TICKET.body.replace("<what the user does> → <what they see>", "open the app → the quote shows") };
+  const medium = [
+    run([file("package.json")]),
+    run([file("docs/specs/001-x.md")]),
+    run([file("src/a.py")], { ticket }),
+    run([file("src/a.py", { additions: 200 })]),
+    run([file("package.json"), file("docs/specs/001-x.md", { additions: 200 })], { ticket }),
+  ];
+  for (const r of medium) assert.equal(r.risk, "medium", JSON.stringify(r.reasons));
+  const high = [
+    run([file("migrations/1.sql")]),
+    run([file("src/auth/session.py")]),
+    run([file("Makefile")]),
+    run([file("src/a.py")], { body: BODY.replace("findings: 0", "findings: 1") }),
+    run([file("tests/test_a.py", { status: "removed" })]),
+    run([file("tests/test_a.py", { patch: "+  it.skip('x')" })]),
+    run([file("tests/test_a.py", { patch: undefined })]),
+    run([file("src/a.py")], { ticket: null, body: BODY.replace("Closes #7", "") }),
+    run([file("src/a.py")], { body: "Closes #7\n" }),
+    run([file("package.json"), file("AGENTS.md")]),
+  ];
+  for (const r of high) assert.equal(r.risk, "high", JSON.stringify(r.reasons));
+  for (const r of [...medium, ...high]) assert.ok(r.reasons.every((x) => ["medium", "high"].includes(x.level)));
+});
+
 test("linkedIssue parses closing keywords", () => {
   assert.equal(linkedIssue("Closes #12"), 12);
   assert.equal(linkedIssue("this fixes: #3 now"), 3);

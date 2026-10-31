@@ -1,6 +1,6 @@
 ---
 name: create-tickets
-description: Create GitHub tickets (issues) an autonomous agent run can complete without asking questions — either all tickets for a merged feature spec the user references, or one standalone ticket for small work. Use whenever the user wants a ticket, issue, task, or work item for an agent — "make tickets for spec 003", "make an issue for X", "next task is X", "queue up X". Never create agent tickets without this skill.
+description: Create GitHub tickets (issues) an autonomous agent run can complete without asking questions — either all tickets for a merged feature spec the user references, one standalone ticket for small work, or an incident ticket for something QA found that merged work missed or got wrong. Use whenever the user wants a ticket, issue, task, or work item for an agent — "make tickets for spec 003", "make an issue for X", "next task is X", "queue up X", "I found a bug in X", "this was missed". Never create agent tickets without this skill.
 ---
 
 # Create tickets
@@ -35,14 +35,42 @@ Plugin paths (`templates/…`, `scripts/factory`) are two directories up from th
    Ask all at once. Answering them is the approval: the ticket is ready as soon as it is created.
 3. Write the body and run `scripts/factory tickets create "<title>" <body-file>`.
 
+## Mode C — incident (testing found something merged work missed or got wrong)
+
+An incident ticket is a Mode B ticket plus its root cause, so audits can count incidents and what
+caused them. Use it when the user reports a bug or gap in something the factory already built.
+A change of mind is not an incident: that is a plain Mode B ticket. Ask when unsure.
+
+1. Find what introduced it: the merged PR (`git log` on the files involved) and the ticket it
+   closes. Read that ticket, the spec it names (it may be in `docs/specs/archive/` by now), and
+   the PR's diff.
+2. Pick the cause, the first that fits:
+   - `spec` — the spec did not cover the behaviour, or got it wrong.
+   - `ticket` — the spec covered it; the ticket left it out or misstated it.
+   - `implementation` — the ticket said it; the code does not do it, and neither `check` nor the
+     review caught it.
+   - `other` — none of these (environment, data, a third-party service, the factory itself).
+3. Ask the Mode B questions, and in the same message give the cause you picked with one line of
+   evidence (the ticket line, or the spec section that is silent), for the user to confirm.
+4. Write the body as in Mode B, with the **Incident** section filled in. When a test can assert
+   the incident, a Tested line reproduces it, so it cannot come back unseen.
+5. Run `scripts/factory tickets create "<title>" <body-file> --incident <cause>`: it adds the
+   `incident` and `cause:<cause>` labels.
+
+For an audit, `scripts/factory tickets incidents` counts every incident ticket, open or closed, by
+cause.
+
 ## The ticket body
 
 Fill `templates/github/ISSUE_TEMPLATE/agent-task.md` (it is also the repo's issue template):
 
 - **Goal** — what and why, 2–3 sentences. **Spec:** the spec path and section, or `none`.
+- **Incident** — Mode C only: the ticket and PR that introduced it, and the cause with one
+  sentence on what was missing or wrong. Delete the section otherwise.
 - **Acceptance criteria** — *Tested*: input → expected output, one line each; `None` if the ticket
   adds no logic. *Observed*: what the user does → what they see; `None` if nothing must be seen
-  running. A real Observed line makes the PR high impact — use it only when a human must look.
+  running. A real Observed line makes the PR medium impact, so it waits for the owner unless the
+  project's `autoMerge` is `medium` — use it only when a human must look.
   Every line states what is asserted or observed; "handles bad data" is a wish.
 - **Scope** — real paths or globs. For paths that exist now, verify them:
   `for p in <paths>; do ls -d $p >/dev/null || echo "missing: $p"; done`. Paths an earlier ticket

@@ -1,18 +1,19 @@
 // The factory gate, run as a GitHub Action on every pull_request event (and when the `merge`
 // label is added): classify → label + one sticky comment → wait for the other checks → decide →
-// ask the owner (high impact) or check the PR on the current base → merge → start the routine.
+// ask the owner (above the project's autoMerge level) or check the PR on the current base →
+// merge → start the routine.
 // Fails CLOSED: any error rates the PR high and fails the gate.
 // On an issue labelled `blocked` it only mentions the owners (mentionBlocked).
 import { readFileSync } from "node:fs";
 import { validateConfig } from "./config.mjs";
-import { gate, MERGE_LABEL } from "./gate.mjs";
+import { gate, MERGE_LABEL, needsGoAhead } from "./gate.mjs";
 import { client } from "./github.mjs";
 import { mergeCheck } from "./mergecheck.mjs";
 import {
   activeTicket, BLOCK_MARKER, BLOCKED_LABEL, fireRequest, fireRoutine, liveReason, mentionBody, needsBlockMention, needsRework, openAttempt,
   REWORK_LABEL,
 } from "./notify.mjs";
-import { classify, linkedIssue } from "./rules.mjs";
+import { classify, LEVELS, linkedIssue } from "./rules.mjs";
 
 const MARKER = "<!-- factory:gate -->";
 const ASK_MARKER = "<!-- factory:ask-owner -->";
@@ -70,10 +71,9 @@ async function readBaseConfig(baseRef) {
 }
 
 async function setRiskLabel(risk) {
-  const want = `risk:${risk}`;
-  const other = risk === "high" ? "risk:low" : "risk:high";
-  await gh.post(`${R}/issues/${number}/labels`, { labels: [want] });
-  await gh.del(`${R}/issues/${number}/labels/${encodeURIComponent(other)}`).catch(() => {});
+  await gh.post(`${R}/issues/${number}/labels`, { labels: [`risk:${risk}`] });
+  for (const other of LEVELS.filter((l) => l !== risk))
+    await gh.del(`${R}/issues/${number}/labels/${encodeURIComponent(`risk:${other}`)}`).catch(() => {});
 }
 
 async function upsertComment(text) {
@@ -84,11 +84,16 @@ async function upsertComment(text) {
   else await gh.post(`${R}/issues/${number}/comments`, { body });
 }
 
+const ICON = { low: "🟢", medium: "🟡", high: "🔴" };
+
 function render(result, decision) {
-  const head = result.risk === "high" ? `### Factory gate: 🔴 high impact — needs an owner's \`${MERGE_LABEL}\` label` : "### Factory gate: 🟢 low impact";
+  const wait = needsGoAhead(result.risk, result.autoMerge)
+    ? ` — needs an owner's \`${MERGE_LABEL}\` label`
+    : result.risk === "low" ? "" : ` — merges when green (\`autoMerge: ${result.autoMerge}\`)`;
+  const head = `### Factory gate: ${ICON[result.risk] ?? ICON.high} ${result.risk} impact${wait}`;
   const lines = result.reasons.map((r) => {
     const files = r.files.length ? `: ${r.files.slice(0, 8).map((f) => `\`${f}\``).join(", ")}${r.files.length > 8 ? ` (+${r.files.length - 8} more)` : ""}` : "";
-    return `- **${r.rule}** — ${r.detail}${files}`;
+    return `- **${r.rule}** (${r.level}) — ${r.detail}${files}`;
   });
   return [head, "", ...(lines.length ? lines : ["No impact rule fired."]), "", `**Gate:** ${decision}`].join("\n");
 }
@@ -105,11 +110,11 @@ async function mentionOwners(owners, text) {
 // Ask once per PR; later pushes that drop the label ask again on their own. The PR now waits for
 // the owner, so the routine is started too: its run's notification reaches the owner's phone, and
 // the run can take on other work meanwhile.
-async function askOwners(owners, base, staleMinutes) {
+async function askOwners(owners, risk, base, staleMinutes) {
   const comments = await gh.paginate(`${R}/issues/${number}/comments`);
   if (comments.some((c) => c.body?.startsWith(ASK_MARKER))) return;
-  await mentionOwners(owners, `this PR is high impact and its checks are green. Review it, then add the \`${MERGE_LABEL}\` label: the gate checks it against the current \`${base}\` and merges it. The gate comment says why it is high impact.`);
-  await fire(`PR #${number} is high impact and waits for an owner's \`${MERGE_LABEL}\` label`, staleMinutes);
+  await mentionOwners(owners, `this PR is ${risk} impact and its checks are green. Review it, then add the \`${MERGE_LABEL}\` label: the gate checks it against the current \`${base}\` and merges it. The gate comment says why it is ${risk} impact.`);
+  await fire(`PR #${number} is ${risk} impact and waits for an owner's \`${MERGE_LABEL}\` label`, staleMinutes);
 }
 
 // The PR cannot merge as it stands (conflict, or red on the current base): label its ticket
@@ -205,10 +210,11 @@ async function main() {
     const ticket = issue ? await gh.get(`${R}/issues/${issue}`).then((t) => ({ number: issue, body: t.body ?? "" })).catch(() => null) : null;
     result = classify({ config, files, pr: { body: pr.body ?? "", draft: pr.draft }, ticket });
     result.owners = config.owners;
+    result.autoMerge = config.autoMerge ?? "low";
     result.staleMinutes = config.run?.staleMinutes;
   } catch (err) {
     // Without a readable config the repo's owner is the one to ask.
-    result = { risk: "high", reasons: [{ rule: "error", detail: `the classifier failed, so the PR is high impact: ${err.message}`, files: [] }], owners: [repo.split("/")[0]] };
+    result = { risk: "high", reasons: [{ rule: "error", level: "high", detail: `the classifier failed, so the PR is high impact: ${err.message}`, files: [] }], owners: [repo.split("/")[0]] };
   }
   log(`risk: ${result.risk}`, JSON.stringify(result.reasons));
   await setRiskLabel(result.risk);
@@ -223,7 +229,7 @@ async function main() {
   // The head reached GitHub when its first check suite was created (the agent cannot set that).
   const suites = (await gh.get(`${R}/commits/${pr.head.sha}/check-suites`)).check_suites ?? [];
   const headPushedAt = suites.map((s) => s.created_at).filter(Boolean).sort()[0] ?? null;
-  const decision = gate({ risk: result.risk, owners: result.owners, draft: pr.draft, labels, events, headPushedAt, checks });
+  const decision = gate({ risk: result.risk, autoMerge: result.autoMerge, owners: result.owners, draft: pr.draft, labels, events, headPushedAt, checks });
   log(decision.summary);
   if (!decision.merge) {
     await upsertComment(render(result, decision.summary));
@@ -231,7 +237,7 @@ async function main() {
       await gh.del(`${R}/issues/${number}/labels/${encodeURIComponent(MERGE_LABEL)}`).catch(() => {});
       await mentionOwners(result.owners, `new commits were pushed after the \`${MERGE_LABEL}\` label was added, so the gate removed it. Review the new commits and add it again to merge.`);
     } else if (decision.needsOwner) {
-      await askOwners(result.owners, pr.base.ref, result.staleMinutes);
+      await askOwners(result.owners, result.risk, pr.base.ref, result.staleMinutes);
     }
     if (!decision.pass) process.exitCode = 1;
     return;

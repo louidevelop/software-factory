@@ -1,5 +1,9 @@
-// The impact rules. Pure: classify(input) → { risk, reasons }. Any one rule firing makes a PR
-// high impact; nothing lowers a rating. Callers treat any thrown error as high.
+// The impact rules. Pure: classify(input) → { risk, reasons }. Each rule has a fixed level, medium
+// or high; a PR's risk is the highest level of any rule that fires, low when none does. Nothing
+// lowers a rating. Callers treat any thrown error as high.
+// Medium is work a human may want to see but that is easy to undo (a dependency, a spec, a big
+// diff, a UI to look at); high is what weakens the guardrails or is hard to undo. A project's
+// `autoMerge` (gate.mjs) decides whether medium waits for an owner; high always does.
 //
 // input = {
 //   config,            // project .factory/config.json, read from the BASE branch
@@ -107,58 +111,61 @@ function addedLines(patch) {
   return (patch ?? "").split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++"));
 }
 
+export const LEVELS = ["low", "medium", "high"];
+
 export function classify({ config, files, pr, ticket }) {
   const paths = config.paths ?? {};
   const reasons = [];
-  const fire = (rule, detail, hits = []) => reasons.push({ rule, detail, files: hits });
+  const fire = (rule, level, detail, hits = []) => reasons.push({ rule, level, detail, files: hits });
   const names = (f) => [f.filename, f.previous_filename].filter(Boolean);
   const touching = (globs) =>
     files.filter((f) => names(f).some((n) => matchesAny(n, globs))).map((f) => f.filename);
 
   const deps = touching([...DEPENDENCY_MANIFESTS, ...(paths.dependencies ?? [])]);
-  if (deps.length) fire("dependencies", "dependency manifest or lockfile changed", deps);
+  if (deps.length) fire("dependencies", "medium", "dependency manifest or lockfile changed", deps);
 
   const migrations = touching(paths.migrations ?? []);
-  if (migrations.length) fire("migrations", "migration files changed", migrations);
+  if (migrations.length) fire("migrations", "high", "migration files changed", migrations);
 
   const sensitive = touching(paths.sensitive ?? []);
-  if (sensitive.length) fire("sensitive", "sensitive paths changed", sensitive);
+  if (sensitive.length) fire("sensitive", "high", "sensitive paths changed", sensitive);
 
   const guardrails = touching([...GUARDRAILS, ...(paths.guardrails ?? [])]);
-  if (guardrails.length) fire("guardrails", "guardrail files changed (rules, config, CI, hooks, linters)", guardrails);
+  if (guardrails.length) fire("guardrails", "high", "guardrail files changed (rules, config, CI, hooks, linters)", guardrails);
 
   const specs = touching(SPECS);
-  if (specs.length) fire("specs", "spec files changed", specs);
+  if (specs.length) fire("specs", "medium", "spec files changed", specs);
 
   if (ticket && hasObservedCriteria(ticket.body))
-    fire("observed", `ticket #${ticket.number} has Observed criteria; a human verifies them`);
+    fire("observed", "medium", `ticket #${ticket.number} has Observed criteria for a human to see running`);
 
   const unresolved = unresolvedBlockingFindings(pr.body);
   if (unresolved && unresolved > 0)
-    fire("local-review", `${unresolved} unresolved blocking finding(s) from local review`);
+    fire("local-review", "high", `${unresolved} unresolved blocking finding(s) from local review`);
 
   const testGlobs = [...TEST_FILES, ...(paths.tests ?? [])];
   const deletedTests = files
     .filter((f) => f.status === "removed" && matchesAny(f.filename, testGlobs))
     .map((f) => f.filename);
-  if (deletedTests.length) fire("tests-deleted", "test files deleted", deletedTests);
+  if (deletedTests.length) fire("tests-deleted", "high", "test files deleted", deletedTests);
   const skipped = files
     .filter((f) => addedLines(f.patch).some((l) => SKIP_MARKERS.some((re) => re.test(l))))
     .map((f) => f.filename);
-  if (skipped.length) fire("tests-skipped", "skip markers added to tests", skipped);
+  if (skipped.length) fire("tests-skipped", "high", "skip markers added to tests", skipped);
   const unseen = files.filter((f) => f.patch === undefined && f.status !== "removed" && matchesAny(f.filename, testGlobs));
-  if (unseen.length) fire("tests-unreadable", "test file diffs too large to inspect for skip markers", unseen.map((f) => f.filename));
+  if (unseen.length) fire("tests-unreadable", "high", "test file diffs too large to inspect for skip markers", unseen.map((f) => f.filename));
 
   const limits = { lines: 400, files: 20, ...(config.limits ?? {}) };
   const counted = files.filter((f) => !matchesAny(f.filename, [...LOCKFILES, ...(paths.generated ?? [])]));
   const lines = counted.reduce((n, f) => n + (f.additions ?? 0) + (f.deletions ?? 0), 0);
-  if (lines > limits.lines) fire("size", `${lines} changed lines (limit ${limits.lines})`);
-  if (counted.length > limits.files) fire("size", `${counted.length} files changed (limit ${limits.files})`);
+  if (lines > limits.lines) fire("size", "medium", `${lines} changed lines (limit ${limits.lines})`);
+  if (counted.length > limits.files) fire("size", "medium", `${counted.length} files changed (limit ${limits.files})`);
 
-  if (!ticket) fire("no-ticket", "no linked ticket (`Closes #N`); a human reviews and merges it");
+  if (!ticket) fire("no-ticket", "high", "no linked ticket (`Closes #N`); a human reviews and merges it");
   const missing = REQUIRED_PR_SECTIONS.filter((s) => section(pr.body, s.replace(/^## /, "")) === null);
-  if (missing.length) fire("pr-sections", `PR description is missing: ${missing.join(", ")}`);
-  else if (unresolved === null) fire("pr-sections", "Local review section does not state `Unresolved blocking findings: N`");
+  if (missing.length) fire("pr-sections", "high", `PR description is missing: ${missing.join(", ")}`);
+  else if (unresolved === null) fire("pr-sections", "high", "Local review section does not state `Unresolved blocking findings: N`");
 
-  return { risk: reasons.length ? "high" : "low", reasons };
+  const risk = LEVELS[Math.max(0, ...reasons.map((r) => LEVELS.indexOf(r.level)))];
+  return { risk, reasons };
 }

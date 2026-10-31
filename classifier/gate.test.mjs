@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { gate, MERGE_LABEL, ownerGoAhead } from "./gate.mjs";
+import { gate, MERGE_LABEL, needsGoAhead, ownerGoAhead } from "./gate.mjs";
 
 const GREEN = { pending: [], failed: [], passed: ["check"] };
 const base = { risk: "low", owners: ["Owner"], draft: false, labels: [], events: [], checks: GREEN };
@@ -23,6 +23,21 @@ test("high waits for the owner's merge label and says it needs the owner", () =>
   assert.deepEqual([waiting.pass, waiting.merge, waiting.needsOwner], [false, false, true]);
   const go = gate({ ...high, labels: [MERGE_LABEL], events: [labeled("owner", AFTER)], headPushedAt: PUSHED });
   assert.equal(go.merge, true, "owner login is case-insensitive");
+});
+
+test("medium waits for the owner unless the project's autoMerge is medium", () => {
+  const medium = { ...base, risk: "medium" };
+  assert.equal(gate(medium).needsOwner, true, "autoMerge defaults to low");
+  assert.equal(gate({ ...medium, autoMerge: "low" }).needsOwner, true);
+  assert.equal(gate({ ...medium, autoMerge: "medium" }).merge, true);
+  assert.equal(gate({ ...base, autoMerge: "medium" }).merge, true, "low still merges");
+});
+
+test("high always waits for the owner, and unknown values fail closed", () => {
+  for (const autoMerge of [undefined, "low", "medium", "high", "everything"])
+    assert.equal(gate({ ...base, risk: "high", autoMerge }).needsOwner, true, String(autoMerge));
+  assert.equal(needsGoAhead("bogus", "medium"), true, "an unknown risk counts as high");
+  assert.equal(needsGoAhead("medium", "bogus"), true, "an unknown autoMerge counts as low");
 });
 
 test("the label only counts when an owner added it, judged by the latest labeling", () => {

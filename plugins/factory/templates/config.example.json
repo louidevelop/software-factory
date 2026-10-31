@@ -1,6 +1,7 @@
 {
   "version": 1,
   "owners": ["louidevelop"],
+  "autoMerge": "low",
   "check": "make check",
   "fix": [
     {

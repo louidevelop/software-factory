@@ -2,7 +2,7 @@
 // plugins/factory/templates/config.schema.json. Hand-written (zero dependencies); keep the two
 // in step. Returns a list of problems; empty means valid.
 
-const TOP = ["version", "owners", "check", "fix", "setup", "block", "paths", "limits", "review", "run"];
+const TOP = ["version", "owners", "autoMerge", "check", "fix", "setup", "block", "paths", "limits", "review", "run"];
 const PATHS = ["migrations", "sensitive", "guardrails", "dependencies", "generated", "tests"];
 
 const isStr = (v) => typeof v === "string" && v.length > 0;
@@ -15,6 +15,8 @@ export function validateConfig(c) {
   if (c.version !== 1) p.push("version must be 1");
   if (!Array.isArray(c.owners) || c.owners.length === 0 || !c.owners.every(isStr))
     p.push("owners must be a non-empty list of GitHub logins");
+  if (c.autoMerge !== undefined && !["low", "medium"].includes(c.autoMerge))
+    p.push("autoMerge must be low or medium (high impact always waits for an owner)");
   if (!isStr(c.check)) p.push("check must be a non-empty command");
   if (c.fix !== undefined) {
     if (!Array.isArray(c.fix)) p.push("fix must be a list");

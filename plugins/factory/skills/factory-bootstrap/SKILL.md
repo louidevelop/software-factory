@@ -36,12 +36,41 @@ continue until every one is answered:
   user has no opinion, propose layers that fit the stack and get a yes.
 - External services (each will live behind exactly one module).
 - What is sensitive: auth, payments, data deletion, personal data, signature verification, prompts.
-  These become `paths.sensitive`.
+  These become `paths.sensitive`, and a PR touching one always waits for the owner: keep the list
+  to what the owner truly wants to see before it merges.
 - Migrations: tool and directory (`paths.migrations`), and the commands that APPLY them to a shared
   database (these go in `block`).
 - Deploy commands (these go in `block`).
-- UI or not. If yes: where design tokens live, and whether a component kit exists.
+- UI or not. If yes, the **UI approach** (below): decided now, like the stack.
+- How much merges without the owner. The gate rates every PR low, medium or high impact;
+  `autoMerge` is the highest level it merges alone. `low` (default): every PR a rule fires on
+  waits for the owner. `medium`: dependency, spec, size and Observed PRs merge when green too — for
+  a hobby project or a prototype, where reviewing every PR costs more than it saves. High impact
+  (guardrails, sensitive paths, migrations, weakened tests) always waits.
 - GitHub repo name.
+
+### UI approach
+
+Decide it here, never later: switching midway means tickets that rebuild screens, and without a
+decision agents hand-roll a component layer one ticket at a time. In the batch, recommend one from
+what you know of the product, say what would change your mind, and get a yes:
+
+| | Component library | Own components |
+|---|---|---|
+| What | A ready-made kit that fits the stack (e.g. daisyUI, shadcn/ui, Mantine, Vuetify, Tamagui), restyled only through its theme | Design tokens plus a small kit the project writes and owns |
+| When | Speed over a distinctive look: hobby projects, prototypes, internal tools. The default when the user has no strong view | The look is part of the product, or a designer's design must be matched |
+| Agents | Use the library's component for anything it has; never write their own button, input, dialog or card. Look changes go through the theme | Screens compose kit components only; a new kit component is a ticket decision, never added in passing |
+| Fences | Tokens only through the theme: a grep fence on raw colour values | The outfit-assistant UI fences in `examples/` (tokens in one place, variant props, no `className` passthrough) |
+
+Ask with it, in the same batch:
+
+- Library: which one. Read its current documentation for the stack before proposing it.
+- Own components: where the tokens come from (a designer's file, a brand, or propose a small palette).
+- Both: dark mode or not, and which screens or platforms the first features need.
+
+Record the answer in `AGENTS.md`: the library or kit in the stack line, and a UI bullet under
+conventions saying what agents use and what they never build. The walking skeleton sets it up
+(step 4), so no feature ticket has to.
 
 ## 2. Choose a tool per contract slot — the user confirms
 
@@ -66,7 +95,7 @@ flags or config keys from memory.
 Write, adapting the templates:
 
 - `.factory/config.json` — from `templates/config.example.json`; schema in `templates/config.schema.json`.
-  `owners` = the user's GitHub login. Fill `paths.*` from the interview;
+  `owners` = the user's GitHub login, `autoMerge` from the interview. Fill `paths.*` from the interview;
   add every linter/fence config and check script to `paths.guardrails`.
 - `AGENTS.md` — from `templates/AGENTS.md`: product line, stack, layer chain with one bullet per
   layer, fences, conventions. Keep only judgment calls. The install already wrote the factory block
@@ -91,7 +120,8 @@ Write, adapting the templates:
 
 One small module per layer, each with one real test, wired along the allowed direction — so fences,
 tests and `check` are real from the first commit, not switched on later against existing code.
-Run `check`; it must be green.
+With a UI, one screen built the chosen way: the library installed and themed with the project's
+tokens, or the first kit component with its tokens. Run `check`; it must be green.
 
 ## 5. GitHub
 
@@ -112,9 +142,11 @@ Report each probe with its actual output. Undo every probe's change afterwards.
 4. Edit a file into a state the fix command cannot repair → the after-edit hook's message reaches you.
 5. A throwaway file that imports across a fence → `check` fails naming the fence. Delete it.
 6. Push → CI runs `check` and it is green.
-7. (Needs the gate) A PR that changes the lockfile → labelled `risk:high`, assigned to the owner with
-   a comment mentioning them, not merged until the owner adds the `merge` label.
+7. (Needs the gate) A PR with a ticket that changes `AGENTS.md` → labelled `risk:high`, assigned to
+   the owner with a comment mentioning them, not merged until the owner adds the `merge` label.
 8. (Needs the gate) A trivial PR with a ticket → `risk:low`, merged by the gate.
+9. (Needs the gate) A PR with a ticket that changes the lockfile → `risk:medium`: with `autoMerge`
+   `medium` merged by the gate, otherwise waiting for the owner as in probe 7.
 
 Probes 1–4 need the hooks loaded: they fire only in a session started after the install wrote them
 into `.claude/settings.json`, and they act only once `.factory/config.json` exists. If this session

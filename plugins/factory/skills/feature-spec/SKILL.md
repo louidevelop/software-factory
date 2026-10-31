@@ -42,7 +42,8 @@ Fill `templates/spec.md`:
 - **Design** only when architecture changes (new layer, external service, data model). Propose it
   yourself, grounded in `AGENTS.md`; the human approves it in the PR. Otherwise delete the section.
 - **Verification**: split Tested / Observed honestly. Every Observed line will make its ticket's
-  PR high impact — that is intended, a human must look.
+  PR medium impact — that is intended, a human must look (before the merge, unless the project's
+  `autoMerge` is `medium`).
 - Nothing may depend on this conversation: the reader has only the repo and the spec.
 
 ## 5. Open the spec PR and the tracking issue

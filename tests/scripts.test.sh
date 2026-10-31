@@ -139,11 +139,32 @@ called POST "$I" 'labels[]=agent-task' && called POST "$I" $'body=## Goal\nShip 
 called POST "$I/10/sub_issues" 'sub_issue_id=3000' && ok || no "tickets create links the sub-issue by id"
 called POST "$I/30/dependencies/blocked_by" 'issue_id=2900' && ok || no "tickets create records the blocker by id"
 
+# tickets create --incident: the incident label and one cause label; an unknown cause creates nothing.
+fresh_calls
+OUT=$("$FACTORY" tickets create "Fix it" "$P/body.md" --incident ticket 2>/dev/null)
+[ "$OUT" = 30 ] && ok || no "tickets create --incident prints the new number (got '$OUT')"
+called POST "$I" 'labels[]=agent-task' && called POST "$I" 'labels[]=incident' && called POST "$I" 'labels[]=cause:ticket' &&
+  ok || no "tickets create --incident labels it agent-task, incident and cause:ticket"
+fresh_calls
+"$FACTORY" tickets create "Fix it" "$P/body.md" --incident typo >/dev/null 2>&1 && no "an unknown incident cause is refused" || ok
+called POST "$I" && no "an unknown incident cause creates no issue" || ok
+
+# tickets incidents: open and closed, counted by cause; one without a cause label is untriaged.
+reply GET "$I?labels=incident&state=all&sort=created&direction=asc&per_page=100" "[
+  {\"number\": 40, \"state\": \"closed\", \"title\": \"Score shows NaN\", \"labels\": $(label agent-task incident cause:spec)},
+  {\"number\": 41, \"state\": \"open\", \"title\": \"Button overlaps\", \"labels\": $(label agent-task incident cause:implementation)},
+  {\"number\": 42, \"state\": \"open\", \"title\": \"Typo\", \"labels\": $(label agent-task incident cause:spec)},
+  {\"number\": 43, \"state\": \"open\", \"title\": \"Odd\", \"labels\": $(label incident)}]"
+OUT=$("$FACTORY" tickets incidents 2>&1)
+[[ $OUT == "4 incident(s)"*"spec: 2"*"implementation: 1"*"untriaged: 1"* ]] && ok || no "tickets incidents counts by cause (got '$OUT')"
+[[ $OUT == *"#40 CLOSED [spec] Score shows NaN"*"#43 OPEN [untriaged] Odd"* ]] && ok || no "tickets incidents lists each one with its cause"
+[[ $OUT == *"ticket: "* ]] && no "tickets incidents skips causes with no incidents" || ok
+
 # github-setup --apply: every label the factory and its gate use, rework included.
 reply POST repos/o/r/labels '{}'
 fresh_calls
 "$FACTORY" github-setup --apply >/dev/null 2>&1
-for l in agent-task in-progress blocked rework merge risk:low risk:high; do
+for l in agent-task in-progress blocked rework merge risk:low risk:medium risk:high incident cause:spec cause:ticket cause:implementation cause:other; do
   called POST repos/o/r/labels "name=$l" && ok || no "github-setup creates the $l label"
 done
 

@@ -8,10 +8,15 @@
   "properties": {
     "version": { "const": 1 },
     "owners": {
-      "description": "GitHub logins the gate assigns and mentions on high-impact PRs; only their `merge` label lets such a PR merge.",
+      "description": "GitHub logins the gate assigns and mentions on PRs above the autoMerge level; only their `merge` label lets such a PR merge.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1
+    },
+    "autoMerge": {
+      "description": "The highest impact level the gate merges without an owner's `merge` label. `low` (default): every PR a rule fires on waits for an owner. `medium`: dependency, spec, size and Observed changes merge when green too — for hobby projects and prototypes. High impact (guardrails, sensitive paths, migrations, weakened tests, unresolved review findings) always waits.",
+      "enum": ["low", "medium"],
+      "default": "low"
     },
     "check": {
       "description": "The one command that must pass locally and in CI, byte for byte. Run from the project root.",
@@ -64,7 +69,7 @@
         "migrations": { "$ref": "#/$defs/globs", "description": "Touching these makes a PR high impact." },
         "sensitive": { "$ref": "#/$defs/globs", "description": "Auth, payments, data deletion, signature checks, prompts… Touching these makes a PR high impact." },
         "guardrails": { "$ref": "#/$defs/globs", "description": "Project guardrail files beyond the built-in list (linter configs, check scripts, Makefile). High impact." },
-        "dependencies": { "$ref": "#/$defs/globs", "description": "Dependency manifests beyond the built-in list. High impact." },
+        "dependencies": { "$ref": "#/$defs/globs", "description": "Dependency manifests beyond the built-in list. Medium impact." },
         "generated": { "$ref": "#/$defs/globs", "description": "Excluded from the size count." },
         "tests": { "$ref": "#/$defs/globs", "description": "Test files beyond the built-in patterns, for the deleted-tests rule." }
       }
@@ -73,7 +78,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "lines": { "type": "integer", "minimum": 1, "default": 400 },
+        "lines": { "type": "integer", "minimum": 1, "default": 400, "description": "Above this many changed lines (or `files` files) a PR is medium impact." },
         "files": { "type": "integer", "minimum": 1, "default": 20 }
       }
     },

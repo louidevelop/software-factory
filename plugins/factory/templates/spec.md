@@ -36,7 +36,7 @@ Status: active · Parent issue: #{{PARENT}}
 
 -
 
-**Observed** — seen running by a human (any ticket carrying one is high impact):
+**Observed** — seen running by a human (any ticket carrying one is medium impact):
 
 -
 

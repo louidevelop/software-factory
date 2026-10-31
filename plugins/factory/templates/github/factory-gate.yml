@@ -1,8 +1,8 @@
 # Managed by the software factory (factory sync). Do not edit — changes here arrive as a
-# "factory sync" PR. The gate classifies every PR, waits for the project's own checks, and
-# merges low-impact PRs (high-impact ones once an owner adds the `merge` label) when `check` is
-# green on the PR combined with the current base — it dispatches check.yml for that. Agents never
-# merge or add that label. With the variable FACTORY_ROUTINE_URL and the secret
+# "factory sync" PR. The gate rates every PR low, medium or high impact, waits for the project's
+# own checks, and merges PRs up to the project's `autoMerge` level (the rest once an owner adds
+# the `merge` label) when `check` is green on the PR combined with the current base — it
+# dispatches check.yml for that. Agents never merge or add that label. With the variable FACTORY_ROUTINE_URL and the secret
 # FACTORY_ROUTINE_TOKEN set, it starts the cloud routine after a merge and when a PR starts waiting
 # for an owner. On a ticket labelled `blocked` it mentions the owners, who would not be notified
 # otherwise: the block is made under their own account.

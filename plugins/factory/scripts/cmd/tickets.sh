@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # tickets — GitHub-side ticket plumbing. Skills decide WHAT a ticket says; this does the API.
 #   factory tickets feature <spec-path> <title>          parent issue for a spec (label: feature)
-#   factory tickets create <title> <body-file> [--parent N] [--blocked-by N]...
-#                                                        agent-task issue, linked as sub-issue
+#   factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>]
+#                                                        agent-task issue, linked as sub-issue;
+#                                                        --incident also labels it incident + cause:<cause>
+#   factory tickets incidents                            every incident ticket, counted by cause
 #   factory tickets next [<parent>]                      the next ticket an agent may start
 #   factory tickets list <parent>                        sub-issues with state and blockers
 #   factory tickets show <n>                             the ticket with its comments, for agents
@@ -28,11 +30,12 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
     ;;
 
   create)
-    TITLE=${1:?usage: factory tickets create <title> <body-file> [--parent N] [--blocked-by N]...}
+    TITLE=${1:?usage: factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>]}
     BODY=${2:?usage: factory tickets create <title> <body-file> ...}
     shift 2
     PARENT=""
     BLOCKERS=()
+    LABELS=(-f "labels[]=agent-task")
     while [ $# -gt 0 ]; do
       case "$1" in
         --parent)
@@ -43,12 +46,19 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
           BLOCKERS+=("${2:?}")
           shift
           ;;
+        --incident)
+          CAUSE=${2:?}
+          [[ " ${FACTORY_INCIDENT_CAUSES[*]} " == *" $CAUSE "* ]] ||
+            die "unknown incident cause '$CAUSE' (one of: ${FACTORY_INCIDENT_CAUSES[*]})"
+          LABELS+=(-f "labels[]=incident" -f "labels[]=cause:$CAUSE")
+          shift
+          ;;
         *) die "unknown option $1" ;;
       esac
       shift
     done
     [ -f "$BODY" ] || die "body file not found: $BODY"
-    N=$(factory_api issues -f title="$TITLE" -f "labels[]=agent-task" -f body="$(cat "$BODY")" -q .number) ||
+    N=$(factory_api issues -f title="$TITLE" "${LABELS[@]}" -f body="$(cat "$BODY")" -q .number) ||
       die "issue creation failed"
     [[ $N =~ ^[0-9]+$ ]] || die "issue creation failed"
     if [ -n "$PARENT" ]; then
@@ -109,5 +119,20 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
       (.comments[] | "", "--- @\(.author), \(.created_at)", .body)' <<<"$T"
     ;;
 
-  *) die "usage: factory tickets feature|create|next|list|show ..." ;;
+  incidents)
+    # For audits: how many tickets fixed what an earlier one missed, and why. Open and closed alike.
+    ISSUES=$(factory_api_list "issues?labels=incident&state=all&sort=created&direction=asc&per_page=100") ||
+      die "cannot list incident issues"
+    jq -r --arg causes "${FACTORY_INCIDENT_CAUSES[*]}" '
+      [.[] | select(.pull_request == null)] as $all
+      | def cause: ([.labels[].name | select(startswith("cause:")) | ltrimstr("cause:")] | first) // "untriaged";
+      "\($all | length) incident(s)",
+      (($causes | split(" ")) + ["untriaged"] | .[] as $c
+        | ($all | map(select(cause == $c)) | length) as $n
+        | select($n > 0) | "  \($c): \($n)"),
+      "",
+      ($all[] | "#\(.number) \(.state | ascii_upcase) [\(cause)] \(.title)")' <<<"$ISSUES"
+    ;;
+
+  *) die "usage: factory tickets feature|create|next|list|show|incidents ..." ;;
 esac

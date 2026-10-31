@@ -13,9 +13,10 @@ How a mobile TypeScript app fills the factory contract. Proven in the real repo
 | Tests | Vitest, colocated `foo.test.ts`, `TZ=UTC`, fake timers | AI evals in `evals/` run by hand, never in `check`. |
 | Toolchain | `.nvmrc`, `.dvmrc` (Deno), `.npmrc` `save-exact=true`, lockfile | |
 
-UI fences worth reusing on any UI project: design tokens in exactly one place with the default
-palette disabled; a kit of components with variant props (no `className` passthrough); a11y labels
-inside kit components; screens compose kit components only; all user-facing strings in one module.
+UI fences worth reusing on any project that builds its own components: design tokens in exactly
+one place with the default palette disabled; a kit of components with variant props (no
+`className` passthrough); a11y labels inside kit components; screens compose kit components only;
+all user-facing strings in one module.
 
 AI contracts worth reusing: every model reply is schema-parsed; malformed → retry, never patch or
 clamp; numeric bounds live in the schema and are stated in the prompt as prose.

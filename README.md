@@ -5,8 +5,9 @@ Guardrails and pipeline for agentic coding, shared across projects:
 ```
 feature-spec ─▶ create-tickets ─▶ factory start ─▶ implement (hooks) ─▶ factory review ─▶ factory open-pr ─▶ gate
   spec PR,        sub-issues,       lock, worktree,   check gate, fix     reviewer + one       Local review      classify, label,
-  owner: merge    blocked-by        green base        after edit,         judge per finding    attached          merge low / wait
-                                                       blocklist                                                  for owner on high
+  owner: merge    blocked-by        green base        after edit,         judge per finding    attached          merge up to
+                                                       blocklist                                                  autoMerge / wait
+                                                                                                                  for owner above
 ```
 
 Tech-general: the factory defines a contract each project fills with its own stack, declared in
@@ -43,8 +44,11 @@ Tech-general: the factory defines a contract each project fills with its own sta
    Small work: **create-tickets** directly.
 4. Work, one ticket at a time: **start-ticket** (interactive), or **run-tickets** (`factory run`:
    one ticket unattended, in fresh `claude -p` sessions, then it stops; you start the next).
-5. Review: the gate merges low-impact PRs itself. On a high-impact PR it assigns you and mentions
-   you; review it and add the `merge` label, and the gate merges it.
+5. Review: the gate rates every PR low, medium or high impact (`classifier/rules.mjs` says which
+   rule is which). It merges low-impact PRs itself, and medium-impact ones too when the project's
+   `autoMerge` is `medium` (a hobby project or prototype). On any other PR it assigns you and
+   mentions you; review it and add the `merge` label, and the gate merges it. High impact always
+   waits for you.
 
 Prerequisites on a project machine: bash (3.2+), git, gh, jq, claude. Agents act through your own
 `gh` login; the blocklist keeps them from merging, reviewing, or adding the `merge` label.

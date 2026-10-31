@@ -91,12 +91,13 @@ fi
 if matches_i '(^|[ ;&|(])(gh +api|curl|wget)\b[^;&|]*/pulls/[^/ ]+/ccr/(auto_merge|comments/[^/ ]+/(resolve|unresolve))\b'; then
   block "auto-merging a PR or resolving its review threads. The factory gate merges; the owner gives the go-ahead."
 fi
-# The `merge` label is the owner's go-ahead for a high-impact PR, and agents act as the owner's
-# account, so the gate cannot tell who added it: only this keeps an agent from adding it.
+# The `merge` label is the owner's go-ahead for a PR the gate does not merge alone, and agents act
+# as the owner's account, so the gate cannot tell who added it: only this keeps an agent from
+# adding it.
 # REST sets labels through …/labels and through a `labels[]=` field on an issue or PR.
 if matches 'gh +(pr|issue) +(edit|create)\b[^;&|]*(--add-label|--label|-l)( +|=)["'"'"']?([^ "'"'"']*,)?merge(["'"'"', ]|$)' ||
   matches 'gh +api\b[^;&|]*\blabels\b[^;&|]*\bmerge\b'; then
-  block "adding the merge label. Only the owner gives a high-impact PR the go-ahead."
+  block "adding the merge label. Only the owner gives a PR the go-ahead."
 fi
 
 # ---------- The factory runtime is read-only ----------

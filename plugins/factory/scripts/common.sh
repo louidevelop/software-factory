@@ -62,10 +62,20 @@ FACTORY_LABELS=(
   "blocked|d93f0b|Needs a human: see the latest comment for the question"
   "rework|e99695|The gate sent the PR back: conflict or red on the current base"
   "risk:low|0e8a16|Factory gate: low impact, merges when green"
+  "risk:medium|e4b429|Factory gate: merges when green if the project's autoMerge is medium"
   "risk:high|b60205|Factory gate: waits for the owner's merge label"
-  "merge|0e8a16|The owner's go-ahead: the gate merges this high-impact PR"
+  "merge|0e8a16|The owner's go-ahead: the gate merges this PR"
   "feature|5319e7|Parent issue tracking a feature spec"
+  "incident|b60205|Fixes what an earlier ticket missed or got wrong (found in QA)"
+  "cause:spec|c5def5|Incident cause: the spec did not cover it or got it wrong"
+  "cause:ticket|c5def5|Incident cause: the spec had it; the ticket left it out or misstated it"
+  "cause:implementation|c5def5|Incident cause: the ticket had it; the code missed it and check and review did not catch it"
+  "cause:other|c5def5|Incident cause: none of the above; the ticket's Incident section says what"
 )
+
+# The causes an incident ticket may name: each is a cause:<name> label above.
+# shellcheck disable=SC2034 # read by the commands that source this
+FACTORY_INCIDENT_CAUSES=(spec ticket implementation other)
 
 factory_label_add() { factory_api "issues/$1/labels" -f "labels[]=$2" >/dev/null; }
 # Removing a label the issue does not have is a 404; that is fine.

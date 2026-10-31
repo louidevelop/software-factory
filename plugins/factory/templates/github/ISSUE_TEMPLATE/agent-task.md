@@ -11,6 +11,14 @@ labels: agent-task
 
 Spec: <!-- docs/specs/NNN-feature.md § section, or "none" for a standalone ticket -->
 
+## Incident
+
+<!-- Only on a ticket that fixes what an earlier ticket missed or got wrong (found in QA or
+     testing); delete the section otherwise. Label it `incident` and one `cause:` label. -->
+
+Introduced by: <!-- #<ticket> (PR #<n>), or "unknown" -->
+Cause: <!-- spec | ticket | implementation | other — one sentence: what was missing or wrong, and where -->
+
 ## Acceptance criteria
 
 <!-- These define "done"; the project's check green is assumed — do not list it.
@@ -24,7 +32,7 @@ Spec: <!-- docs/specs/NNN-feature.md § section, or "none" for a standalone tick
 
 ### Observed
 
-<!-- Seen running by a human. Any real line here makes the PR high impact. "None" otherwise. -->
+<!-- Seen running by a human. Any real line here makes the PR medium impact. "None" otherwise. -->
 
 - [ ] <what the user does> → <what they see>
 
