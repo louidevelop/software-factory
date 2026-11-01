@@ -1,6 +1,10 @@
 # {{NNN}} — {{Feature name}}
 
-Status: active · Parent issue: #{{PARENT}}
+Status: active · Parent issue: #{{PARENT}} · Delivery: {{tickets | whole feature}}
+
+<!-- Delivery: `tickets` splits the spec into one PR per concern, small enough to auto-merge piece
+     by piece. `whole feature` builds it as one ticket and one PR, which the owner reviews as a
+     whole: for prototypes and tooling where a careful rollout is not worth the split. -->
 
 ## Problem and goal
 

@@ -31,7 +31,8 @@ usage: factory <command> [args]
   open-pr <issue>        push the branch and open the PR with the review attached
   run [<issue> | next] [--parent <n>]
                          one ticket unattended: attempt, then fresh claude -p sessions
-                         until its PR is open or it is blocked (run.maxAttempts)
+                         until its PR is open or it is blocked (run.maxAttempts, or
+                         run.wholeFeature for a whole-feature ticket)
   block <issue> <reason> label a ticket blocked and comment the reason
   repo                   owner/repo from the git remote, for `gh api repos/$(factory repo)/…`
   prompt <agent|skill>   print the full instructions of a factory agent or skill

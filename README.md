@@ -41,6 +41,8 @@ Tech-general: the factory defines a contract each project fills with its own sta
 2. New project: open Claude Code there and ask for the **factory-bootstrap** skill. It interviews,
    picks a tool per slot, scaffolds, sets up GitHub, and proves every guardrail fires.
 3. Features: **feature-spec** → owner gives the spec PR the `merge` label → **create-tickets** for that spec.
+   Each spec names its delivery: `tickets` (one PR per concern, the default) or `whole feature` (one
+   ticket and one PR for the whole spec, for prototypes and tooling nothing in production relies on).
    Small work: **create-tickets** directly.
 4. Work, one ticket at a time: **start-ticket** (interactive), or **run-tickets** (`factory run`:
    one ticket unattended, in fresh `claude -p` sessions, then it stops; you start the next).

@@ -37,8 +37,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-MAX=$(factory_cfg '.run.maxAttempts')
-MAX=${MAX:-3}
+# A whole-feature ticket (a spec delivered as one PR) is more work per ticket, so it gets its own,
+# larger budget; `factory run` gives its sessions more turns too.
+TICKET_MAX=$(factory_cfg '.run.maxAttempts')
+TICKET_MAX=${TICKET_MAX:-3}
+FEATURE_MAX=$(factory_cfg '.run.wholeFeature.maxAttempts')
+FEATURE_MAX=${FEATURE_MAX:-6}
 STALE=$(factory_cfg '.run.staleMinutes')
 STALE=${STALE:-120}
 BASE=$(factory_base_branch)
@@ -167,7 +171,14 @@ while :; do
     exit 5
   fi
 
-  # 3. Count the attempt; past run.maxAttempts the ticket blocks for the owner.
+  # 3. Count the attempt; past run.maxAttempts (run.wholeFeature.maxAttempts for a whole-feature
+  # ticket) the ticket blocks for the owner.
+  WHOLE=false
+  MAX=$TICKET_MAX
+  if ticket_has_label "$N" whole-feature; then
+    WHOLE=true
+    MAX=$FEATURE_MAX
+  fi
   C=$(comments "$N") || die "cannot read #$N's comments"
   K=$(($(jq "$ATTEMPTS_USED" <<<"$C") + 1))
   if [ "$K" -gt "$MAX" ]; then
@@ -205,9 +216,9 @@ BODY="<!-- factory:attempt $K branch=$BRANCH -->"$'\n'"**Factory attempt $K of $
 ID=$(factory_api "issues/$N/comments" -f body="$BODY" -q .id) && [[ $ID =~ ^[0-9]+$ ]] ||
   die "could not record attempt $K on #$N"
 jq -n --argjson n "$N" --arg b "$BRANCH" --arg h "$(git rev-parse HEAD)" --argjson k "$K" --argjson max "$MAX" \
-  --argjson id "$ID" --arg body "$BODY" --arg dir "$DIR" \
-  '{ticket: $n, branch: $b, head: $h, attempt: $k, max: $max, status: "open", comment_id: $id, comment_body: $body, dir: $dir,
-    started: (now | todate)}' >"$STATE/attempt.json"
+  --argjson id "$ID" --arg body "$BODY" --arg dir "$DIR" --argjson whole "$WHOLE" \
+  '{ticket: $n, branch: $b, head: $h, attempt: $k, max: $max, whole_feature: $whole, status: "open", comment_id: $id,
+    comment_body: $body, dir: $dir, started: (now | todate)}' >"$STATE/attempt.json"
 # Where this attempt runs, for `factory run` (which starts the session in that checkout).
 COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 mkdir -p "$COMMON/factory"

@@ -6,7 +6,8 @@ description: Create GitHub tickets (issues) an autonomous agent run can complete
 # Create tickets
 
 A ticket is the agent's whole world: it has the repo, `AGENTS.md`, the active spec, and the ticket
-— nothing from this conversation. One ticket = one PR = one concern.
+— nothing from this conversation. One ticket = one PR = one concern, except a whole-feature
+ticket (Mode A), which is one PR for the whole spec.
 
 Plugin paths (`templates/…`, `scripts/factory`) are two directories up from this skill's base directory.
 
@@ -15,14 +16,20 @@ Plugin paths (`templates/…`, `scripts/factory`) are two directories up from th
 1. The spec must be merged on the base branch and ACTIVE (`docs/specs/`, not `archive/`). If its PR
    is still open, stop: tickets are written against the approved spec.
 2. Read the spec, `AGENTS.md`, and the code each part touches.
-3. Split the spec into tickets. Each fits one PR and one concern; order them so each builds on
-   merged earlier work. Record real dependencies only (B needs A's code), not mere order.
-4. Questions: the spec answered the product questions. If splitting surfaces one it does not answer,
+3. Read the spec's Delivery (its status line; a spec without one is `tickets`).
+   - `whole feature`: one ticket for the whole spec, created with `--whole-feature` (step 5), which
+     gives it the larger attempt budget in `run.wholeFeature`. Its Goal is the spec's goal; its
+     acceptance criteria are every line of the spec's Verification; its Scope, Prerequisites and
+     Out of scope cover the whole spec. Skip the splitting below.
+   - `tickets`: split the spec into tickets. Each fits one PR and one concern; order them so each
+     builds on merged earlier work. Record real dependencies only (B needs A's code), not mere order.
+4. Questions: the spec answered the product questions. If writing the tickets surfaces one it does not answer,
    ask the user (all at once) — and say the spec should have covered it; fold the answer into the
    ticket's Decisions.
 5. For each ticket, write the body (below) to a temp file and run:
    `scripts/factory tickets create "<imperative title>" <body-file> --parent <spec parent> [--blocked-by <n>]...`
-   Create them in order so `--blocked-by` can reference earlier numbers.
+   (with `--whole-feature` for a whole-feature ticket). Create them in order so `--blocked-by` can
+   reference earlier numbers.
 6. Report every ticket URL. The spec file is not edited: the parent issue's sub-issues are the
    breakdown, and archiving the spec records what was built.
 

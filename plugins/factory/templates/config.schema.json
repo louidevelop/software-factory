@@ -98,6 +98,15 @@
         "maxAttempts": { "type": "integer", "minimum": 1, "default": 3, "description": "Attempts at a ticket (counted on GitHub, since it last finished one or was blocked) before it blocks for the owner." },
         "staleMinutes": { "type": "integer", "minimum": 1, "default": 120, "description": "An attempt that has not ended counts as live, and keeps other attempts from starting, until this long after it started or after the last commit on its branch. After that it is resumed as crashed." },
         "maxTurns": { "type": "integer", "minimum": 1, "default": 80 },
+        "wholeFeature": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The budget of a whole-feature ticket (a spec whose Delivery is `whole feature`: one ticket and one PR), in place of maxAttempts and maxTurns.",
+          "properties": {
+            "maxAttempts": { "type": "integer", "minimum": 1, "default": 6 },
+            "maxTurns": { "type": "integer", "minimum": 1, "default": 200 }
+          }
+        },
         "baseBranch": { "type": "string", "default": "main" }
       }
     }

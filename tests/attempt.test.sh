@@ -190,6 +190,22 @@ issue 5 agent-task blocked
 attempt 5 >/dev/null
 [ $? -eq 5 ] && ok || no "a named blocked ticket is refused with exit 5"
 
+# A whole-feature ticket gets run.wholeFeature.maxAttempts (default 6) instead of run.maxAttempts.
+issue 11 agent-task in-progress whole-feature
+comments 11 "$(att 1 "$OLD" unfinished)" "$(att 2 "$OLD" unfinished)" "$(att 3 "$OLD" unfinished)"
+fresh_calls
+attempt 11 >/dev/null
+[ "$(state "$P/.factory/worktrees/ticket-11" attempt)" = 4 ] && ok || no "a whole-feature ticket goes past run.maxAttempts ($(cat "$W/err"))"
+[ "$(state "$P/.factory/worktrees/ticket-11" whole_feature)" = true ] && ok || no "the attempt records a whole-feature ticket"
+called POST "$I/11/comments" "attempt 4 of 6" && ok || no "the whole-feature budget is 6 by default"
+[ "$(state "$P/.factory/worktrees/ticket-2" whole_feature)" = false ] && ok || no "an ordinary ticket is not whole-feature"
+comments 11 "$(att 1 "$OLD" unfinished)" "$(att 2 "$OLD" unfinished)" "$(att 3 "$OLD" unfinished)" \
+  "$(att 4 "$OLD" unfinished)" "$(att 5 "$OLD" unfinished)" "$(att 6 "$OLD")"
+fresh_calls
+attempt 11 >/dev/null
+[ $? -eq 5 ] && called POST "$I/11/comments" "6 attempts ended without a PR" && ok || no "past 6 attempts a whole-feature ticket blocks"
+comments 11
+
 # ---------- in place: the branch is checked out in this clone (cloud runs) ----------
 C="$W/cloud"
 git clone -q "$ORIGIN" "$C" 2>/dev/null
@@ -273,6 +289,7 @@ called PATCH "$I/comments/200" "attempt-end" && ok || no "block records the atte
 mkdir -p "$W/bin"
 cat >"$W/bin/claude" <<'SH'
 #!/usr/bin/env bash
+[ "${1:-}" = --help ] && echo "  --max-turns <n>"
 [ "${1:-}" = -p ] || exit 0
 S="$(git rev-parse --absolute-git-dir)/factory"
 N=$(cat "$S/ticket")
@@ -302,6 +319,18 @@ list "$(li 7 agent-task)"
 PATH="$W/bin:$PATH" FAKE_CLAUDE=block FACTORY_BIN="$FACTORY" "$FACTORY" run 7 >/dev/null 2>"$W/err"
 [ $? -eq 5 ] && ok || no "run: exit 5 when the session blocks the ticket ($(tail -3 "$W/err"))"
 [ "$(state "$P/.factory/worktrees/ticket-7" status)" = blocked ] && ok || no "run: the attempt is blocked"
+grep -q -- "--max-turns" "$P/.git/worktrees/ticket-7/factory/prompt-seen" && no "run: no turn limit when run.maxTurns is unset" || ok
+
+# Turns per session: run.maxTurns, and 200 by default for a whole-feature ticket.
+# (run reads the config in this checkout, so the edit needs no commit)
+jq '.run.maxTurns = 80' .factory/config.json >"$W/c.json" && cp "$W/c.json" .factory/config.json
+issue 12 agent-task
+issue 13 agent-task whole-feature
+for n in 12 13; do
+  PATH="$W/bin:$PATH" FAKE_CLAUDE=block FACTORY_BIN="$FACTORY" "$FACTORY" run "$n" >/dev/null 2>"$W/err"
+done
+grep -q -- "--max-turns 80" "$P/.git/worktrees/ticket-12/factory/prompt-seen" && ok || no "run: run.maxTurns for a ticket ($(tail -3 "$W/err"))"
+grep -q -- "--max-turns 200" "$P/.git/worktrees/ticket-13/factory/prompt-seen" && ok || no "run: 200 turns for a whole-feature ticket ($(tail -3 "$W/err"))"
 
 echo "attempt: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -149,6 +149,12 @@ fresh_calls
 "$FACTORY" tickets create "Fix it" "$P/body.md" --incident typo >/dev/null 2>&1 && no "an unknown incident cause is refused" || ok
 called POST "$I" && no "an unknown incident cause creates no issue" || ok
 
+# tickets create --whole-feature: one ticket for a whole spec, labelled for its larger budget.
+fresh_calls
+"$FACTORY" tickets create "Build it all" "$P/body.md" --parent 10 --whole-feature >/dev/null 2>&1
+called POST "$I" 'labels[]=agent-task' && called POST "$I" 'labels[]=whole-feature' &&
+  ok || no "tickets create --whole-feature labels it agent-task and whole-feature"
+
 # tickets incidents: open and closed, counted by cause; one without a cause label is untriaged.
 reply GET "$I?labels=incident&state=all&sort=created&direction=asc&per_page=100" "[
   {\"number\": 40, \"state\": \"closed\", \"title\": \"Score shows NaN\", \"labels\": $(label agent-task incident cause:spec)},

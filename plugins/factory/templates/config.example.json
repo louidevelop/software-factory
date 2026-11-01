@@ -26,5 +26,5 @@
   },
   "limits": { "lines": 400, "files": 20 },
   "review": { "model": "opus" },
-  "run": { "maxAttempts": 3, "maxTurns": 80, "staleMinutes": 120, "baseBranch": "main" }
+  "run": { "maxAttempts": 3, "maxTurns": 80, "wholeFeature": { "maxAttempts": 6, "maxTurns": 200 }, "staleMinutes": 120, "baseBranch": "main" }
 }

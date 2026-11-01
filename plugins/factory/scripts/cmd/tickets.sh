@@ -2,8 +2,10 @@
 # tickets — GitHub-side ticket plumbing. Skills decide WHAT a ticket says; this does the API.
 #   factory tickets feature <spec-path> <title>          parent issue for a spec (label: feature)
 #   factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>]
-#                                                        agent-task issue, linked as sub-issue;
-#                                                        --incident also labels it incident + cause:<cause>
+#                          [--whole-feature]             agent-task issue, linked as sub-issue;
+#                                                        --incident also labels it incident + cause:<cause>;
+#                                                        --whole-feature labels it whole-feature (one PR
+#                                                        for a whole spec: the run.wholeFeature budget)
 #   factory tickets incidents                            every incident ticket, counted by cause
 #   factory tickets next [<parent>]                      the next ticket an agent may start
 #   factory tickets list <parent>                        sub-issues with state and blockers
@@ -30,7 +32,7 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
     ;;
 
   create)
-    TITLE=${1:?usage: factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>]}
+    TITLE=${1:?usage: factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>] [--whole-feature]}
     BODY=${2:?usage: factory tickets create <title> <body-file> ...}
     shift 2
     PARENT=""
@@ -53,6 +55,7 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
           LABELS+=(-f "labels[]=incident" -f "labels[]=cause:$CAUSE")
           shift
           ;;
+        --whole-feature) LABELS+=(-f "labels[]=whole-feature") ;;
         *) die "unknown option $1" ;;
       esac
       shift

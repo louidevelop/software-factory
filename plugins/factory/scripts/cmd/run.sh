@@ -31,14 +31,20 @@ while [ $# -gt 0 ]; do
 done
 
 MODEL=$(factory_cfg '.run.model')
-TURNS=$(factory_cfg '.run.maxTurns')
 CLAUDE_ARGS=(--permission-mode auto --permission-prompts none)
 [ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")
-[ -n "$TURNS" ] && claude --help 2>/dev/null | grep -q -- '--max-turns' && CLAUDE_ARGS+=(--max-turns "$TURNS")
+# Turns per session: run.maxTurns, or for a whole-feature ticket run.wholeFeature.maxTurns (200 when
+# only run.maxTurns is set; with neither set, no session has a turn limit).
+TICKET_TURNS=$(factory_cfg '.run.maxTurns')
+FEATURE_TURNS=$(factory_cfg '.run.wholeFeature.maxTurns')
+[ -z "$FEATURE_TURNS" ] && [ -n "$TICKET_TURNS" ] && FEATURE_TURNS=200
+HAS_MAX_TURNS=0
+claude --help 2>/dev/null | grep -q -- '--max-turns' && HAS_MAX_TURNS=1
 COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 
 # Each pass is one attempt; `factory attempt` counts them on GitHub and blocks the ticket past
-# run.maxAttempts, which is what ends this loop when no attempt finishes.
+# run.maxAttempts (run.wholeFeature.maxAttempts), which is what ends this loop when no attempt
+# finishes.
 while :; do
   PROMPT=$(bash "$FACTORY_SCRIPTS/cmd/attempt.sh" "$WHICH" ${PARENT[@]+"${PARENT[@]}"} --worktree)
   code=$?
@@ -59,10 +65,13 @@ while :; do
   N=$(jq -r .ticket "$STATE/attempt.json")
   K=$(jq -r .attempt "$STATE/attempt.json")
   WHICH=$N # the next pass resumes this ticket, never another one
+  TURNS=$([ "$(jq -r '.whole_feature // false' "$STATE/attempt.json")" = true ] && echo "$FEATURE_TURNS" || echo "$TICKET_TURNS")
+  TURN_ARGS=()
+  [ -n "$TURNS" ] && [ "$HAS_MAX_TURNS" -eq 1 ] && TURN_ARGS=(--max-turns "$TURNS")
   mkdir -p "$STATE/logs"
   LOG="$STATE/logs/attempt-$K-$(date +%Y%m%d-%H%M%S).log"
   say "#$N attempt $K — fresh session (log: $LOG)"
-  claude -p "$PROMPT" "${CLAUDE_ARGS[@]}" </dev/null >"$LOG" 2>&1
+  claude -p "$PROMPT" "${CLAUDE_ARGS[@]}" ${TURN_ARGS[@]+"${TURN_ARGS[@]}"} </dev/null >"$LOG" 2>&1
   # The Stop hook holds a session until it ran finish or block, but a session can still die
   # (max turns, a crash): then finish runs here.
   [ "$(jq -r .status "$STATE/attempt.json")" = open ] && bash "$FACTORY_SCRIPTS/cmd/finish.sh" "$N"

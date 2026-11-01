@@ -27,7 +27,9 @@ local review through the reviewer/judge/resolver subagents, fixes confirmed find
 with `factory finish`, which opens the PR when everything is done, or pushes the work in progress
 and records what is missing for the next attempt. A Stop hook keeps a session from ending before
 `finish` or `block` ran. After `run.maxAttempts` unfinished attempts the ticket is labelled
-`blocked` with the reason.
+`blocked` with the reason. A `whole-feature` ticket (a spec delivered as one PR) gets
+`run.wholeFeature.maxAttempts` attempts (default 6) and `run.wholeFeature.maxTurns` turns per
+session (default 200) instead.
 
 Exit codes: 0 the PR is open, 3 nothing to do, 4 the base branch is red, 5 the ticket is blocked,
 6 busy (another attempt is live: runs go one at a time, and an attempt that never ended counts as

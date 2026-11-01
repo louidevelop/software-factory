@@ -46,5 +46,8 @@ export function validateConfig(c) {
   if (c.run?.maxAttempts !== undefined && !isInt(c.run.maxAttempts)) p.push("run.maxAttempts must be a positive integer");
   if (c.run?.maxTurns !== undefined && !isInt(c.run.maxTurns)) p.push("run.maxTurns must be a positive integer");
   if (c.run?.staleMinutes !== undefined && !isInt(c.run.staleMinutes)) p.push("run.staleMinutes must be a positive integer");
+  for (const k of ["maxAttempts", "maxTurns"])
+    if (c.run?.wholeFeature?.[k] !== undefined && !isInt(c.run.wholeFeature[k]))
+      p.push(`run.wholeFeature.${k} must be a positive integer`);
   return p;
 }
