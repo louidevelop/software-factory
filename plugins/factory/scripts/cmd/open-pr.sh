@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # open-pr — push the ticket branch and open its PR, with the local review attached.
 # Run from the ticket's worktree after `factory review` (and `--resolve` when it asked for fixes).
+# An open PR is updated instead, and the ticket's `rework` label goes: the work it asked for is
+# done, whether an unattended attempt (`factory finish`) or an interactive session did it.
 #   factory open-pr [<issue>]
 set -u
 # shellcheck source=../common.sh
@@ -50,4 +52,7 @@ if [ -n "$EXISTING" ]; then
 else
   factory_pr_create "$BASE" "$BRANCH" "$TITLE" "$BODY" || die "could not open the PR"
 fi
+# The done criteria above held (green, no conflict with the base), so the rework is done; left in
+# place, the label would make the next unattended attempt redo it.
+factory_label_remove "$N" rework
 say "the factory gate now classifies the PR and merges it, or asks the owner"

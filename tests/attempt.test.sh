@@ -291,6 +291,17 @@ called PATCH "$I/comments/200" "attempt-end 2 finished" && ok || no "the attempt
 called DELETE "$I/2/labels/rework" && ok || no "a finished attempt clears rework"
 "$FACTORY" finish 2 >/dev/null 2>&1 && ok || no "finishing twice is harmless"
 
+# Rework done interactively: `factory open-pr` updates the open PR and clears rework itself, so
+# the next unattended attempt does not redo it.
+reply GET "repos/o/r/pulls?state=open&head=o:ticket/2-ticket-2" '[{"number": 12}]'
+reply PATCH repos/o/r/pulls/12 '{}'
+fresh_calls
+"$FACTORY" open-pr 2 >/dev/null 2>"$W/err"
+[ $? -eq 0 ] && called PATCH repos/o/r/pulls/12 && ok || no "open-pr updates the open PR ($(cat "$W/err"))"
+called POST repos/o/r/pulls && no "open-pr opens no second PR" || ok
+called DELETE "$I/2/labels/rework" && ok || no "open-pr clears rework when it updates the PR"
+reply GET "repos/o/r/pulls?state=open&head=o:ticket/2-ticket-2" '[]'
+
 # A red check keeps it unfinished.
 CLAUDE_CODE_REMOTE=true attempt 2 >/dev/null
 jq -n --arg h "$(git rev-parse HEAD)" '{head: $h, model: "opus", fixed: [], unresolved: [], nonblocking: [], rejected: []}' >"$S/review.json"

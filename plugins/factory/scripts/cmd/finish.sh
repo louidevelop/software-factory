@@ -48,7 +48,6 @@ PROBLEMS=$(factory_done_problems --no-check)
 if [ -z "$PROBLEMS" ]; then
   if OUT=$(bash "$FACTORY_SCRIPTS/cmd/open-pr.sh" "$N" 2>&1); then
     printf '%s\n' "$OUT" >&2
-    factory_label_remove "$N" rework
     attempt_end "$F" finished "The PR is open."
     say "#$N attempt $K finished: the PR is open"
     exit 0
