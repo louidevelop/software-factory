@@ -57,6 +57,7 @@ while :; do
       exit 5
       ;;
     6) exit 6 ;;
+    7) exit 7 ;;
     *) die "attempt failed (exit $code)" ;;
   esac
   DIR=$(cat "$COMMON/factory/last-attempt")

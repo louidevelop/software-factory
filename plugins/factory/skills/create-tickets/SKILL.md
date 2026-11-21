@@ -23,12 +23,14 @@ Plugin paths (`templates/…`, `scripts/factory`) are two directories up from th
      Out of scope cover the whole spec. Skip the splitting below.
    - `tickets`: split the spec into tickets. Each fits one PR and one concern; order them so each
      builds on merged earlier work. Record real dependencies only (B needs A's code), not mere order.
+   Then read Built by (a spec without it is `factory`): `local` creates every ticket with `--local`,
+   so no unattended run picks it up; the owner starts it with start-ticket.
 4. Questions: the spec answered the product questions. If writing the tickets surfaces one it does not answer,
    ask the user (all at once) — and say the spec should have covered it; fold the answer into the
    ticket's Decisions.
 5. For each ticket, write the body (below) to a temp file and run:
    `scripts/factory tickets create "<imperative title>" <body-file> --parent <spec parent> [--blocked-by <n>]...`
-   (with `--whole-feature` for a whole-feature ticket). Create them in order so `--blocked-by` can
+   (with `--whole-feature` for a whole-feature ticket, `--local` for a locally built spec). Create them in order so `--blocked-by` can
    reference earlier numbers.
 6. Report every ticket URL. The spec file is not edited: the parent issue's sub-issues are the
    breakdown, and archiving the spec records what was built.
@@ -40,7 +42,10 @@ Plugin paths (`templates/…`, `scripts/factory`) are two directories up from th
 2. List every question an engineer who read `AGENTS.md` and the code but never spoke to the user
    would need answered: product behaviour, naming, what to reuse, edge cases. Not how to build it.
    Ask all at once. Answering them is the approval: the ticket is ready as soon as it is created.
-3. Write the body and run `scripts/factory tickets create "<title>" <body-file>`.
+   Always include: built by the `factory` (unattended runs pick it up at once) or `local` (the owner
+   develops it interactively)?
+3. Write the body and run `scripts/factory tickets create "<title>" <body-file>` (with `--local`
+   when it is built locally).
 
 ## Mode C — incident (testing found something merged work missed or got wrong)
 

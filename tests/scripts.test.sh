@@ -98,6 +98,15 @@ OUT=$("$FACTORY" tickets next 10 2>/dev/null)
 reply GET "$I/20/sub_issues?per_page=100" '[]'
 "$FACTORY" tickets next 20 >/dev/null 2>&1
 [ $? -eq 3 ] && ok || no "tickets next exits 3 when nothing is ready"
+# A local ticket is skipped, unless the caller is interactive (--include-local).
+reply GET "$I/30/sub_issues?per_page=100" "[
+  {\"number\": 31, \"state\": \"open\", \"labels\": $(label agent-task local)},
+  {\"number\": 32, \"state\": \"open\", \"labels\": $(label agent-task)}]"
+for n in 31 32; do reply GET "$I/$n/dependencies/blocked_by?per_page=100" '[]'; done
+OUT=$("$FACTORY" tickets next 30 2>/dev/null)
+[ "$OUT" = 32 ] && ok || no "tickets next skips a local ticket (got '$OUT')"
+OUT=$("$FACTORY" tickets next 30 --include-local 2>/dev/null)
+[ "$OUT" = 31 ] && ok || no "tickets next --include-local picks a local ticket (got '$OUT')"
 
 # factory block: label blocked, drop in-progress, comment the reason.
 reply POST "$I/5/labels" "$(label agent-task blocked)"
@@ -154,6 +163,12 @@ fresh_calls
 "$FACTORY" tickets create "Build it all" "$P/body.md" --parent 10 --whole-feature >/dev/null 2>&1
 called POST "$I" 'labels[]=agent-task' && called POST "$I" 'labels[]=whole-feature' &&
   ok || no "tickets create --whole-feature labels it agent-task and whole-feature"
+
+# tickets create --local: the owner develops it interactively; unattended runs skip it.
+fresh_calls
+"$FACTORY" tickets create "Build it here" "$P/body.md" --local >/dev/null 2>&1
+called POST "$I" 'labels[]=agent-task' && called POST "$I" 'labels[]=local' &&
+  ok || no "tickets create --local labels it agent-task and local"
 
 # tickets incidents: open and closed, counted by cause; one without a cause label is untriaged.
 reply GET "$I?labels=incident&state=all&sort=created&direction=asc&per_page=100" "[

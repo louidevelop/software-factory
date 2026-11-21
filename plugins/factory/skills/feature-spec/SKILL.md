@@ -27,13 +27,18 @@ behaviour — it is history; the code is the truth.
 List every question an engineer who has read `AGENTS.md` and the code, but never spoken to the
 user, would need answered: product behaviour, edge cases, naming, what to reuse, what is out of
 scope, which behaviour must be seen running (Observed) rather than asserted (Tested), what only
-a human can provide (keys, recorded fixtures, accounts), and the delivery (below). Not how to build it.
+a human can provide (keys, recorded fixtures, accounts), the delivery and who builds it (below).
+Not how to build it.
 
 **Delivery** — always ask: `tickets` (the default) or `whole feature`? Tickets split the spec into
 one PR per concern, so production code reaches the base in small pieces the gate can auto-merge.
 A whole feature is one ticket and one PR, reviewed by the owner as a whole: fewer runs and PRs,
 less care per piece. Suggest it for prototypes, tooling and harnesses nothing in production relies
 on; suggest tickets for anything users or data depend on. The owner decides.
+
+**Built by** — always ask: the `factory` (the default: unattended runs pick its tickets up as soon
+as they exist) or `local` (the owner develops them interactively with start-ticket)? Local tickets
+are labelled `local`, and no unattended run ever picks them up.
 
 Ask them all in ONE message. Ask follow-ups only for answers that opened new questions. Do not draft
 until the list is empty.
@@ -43,7 +48,8 @@ until the list is empty.
 `NNN` = one more than the highest number in `docs/specs/` and `docs/specs/archive/`, zero-padded.
 Fill `templates/spec.md`:
 
-- **Delivery** in the status line: `tickets` or `whole feature`, as the owner answered.
+- **Delivery** in the status line: `tickets` or `whole feature`, as the owner answered; **Built by**:
+  `factory` or `local`.
 - **Behaviour** as scenarios; **Decisions** one line per answer — what the user gets, never how
   the code does it.
 - **Design** only when architecture changes (new layer, external service, data model). Propose it
@@ -67,5 +73,5 @@ Then replace `#{{PARENT}}` in the spec with the parent number, commit, push, and
 (REST: `gh pr create` uses GraphQL, which fails in cloud sessions).
 
 The PR touches `docs/specs/`, so the gate always routes it to the owner. Report the PR and parent
-URLs, the delivery, and the decisions folded in. Tickets are created later, when the user asks (create-tickets),
+URLs, the delivery, who builds it, and the decisions folded in. Tickets are created later, when the user asks (create-tickets),
 against the merged spec.

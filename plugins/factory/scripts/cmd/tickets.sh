@@ -2,12 +2,15 @@
 # tickets — GitHub-side ticket plumbing. Skills decide WHAT a ticket says; this does the API.
 #   factory tickets feature <spec-path> <title>          parent issue for a spec (label: feature)
 #   factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>]
-#                          [--whole-feature]             agent-task issue, linked as sub-issue;
+#                          [--whole-feature] [--local]   agent-task issue, linked as sub-issue;
 #                                                        --incident also labels it incident + cause:<cause>;
 #                                                        --whole-feature labels it whole-feature (one PR
-#                                                        for a whole spec: the run.wholeFeature budget)
+#                                                        for a whole spec: the run.wholeFeature budget);
+#                                                        --local labels it local (developed interactively:
+#                                                        unattended runs never pick it up)
 #   factory tickets incidents                            every incident ticket, counted by cause
-#   factory tickets next [<parent>]                      the next ticket an agent may start
+#   factory tickets next [<parent>] [--include-local]    the next ticket an agent may start; a `local`
+#                                                        one only with --include-local (interactive)
 #   factory tickets list <parent>                        sub-issues with state and blockers
 #   factory tickets show <n>                             the ticket with its comments, for agents
 set -u
@@ -32,7 +35,7 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
     ;;
 
   create)
-    TITLE=${1:?usage: factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>] [--whole-feature]}
+    TITLE=${1:?usage: factory tickets create <title> <body-file> [--parent N] [--blocked-by N]... [--incident <cause>] [--whole-feature] [--local]}
     BODY=${2:?usage: factory tickets create <title> <body-file> ...}
     shift 2
     PARENT=""
@@ -56,6 +59,7 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
           shift
           ;;
         --whole-feature) LABELS+=(-f "labels[]=whole-feature") ;;
+        --local) LABELS+=(-f "labels[]=local") ;;
         *) die "unknown option $1" ;;
       esac
       shift
@@ -77,7 +81,15 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
     ;;
 
   next)
-    PARENT=${1:-}
+    PARENT=""
+    LOCAL=false
+    for a in "$@"; do
+      case "$a" in
+        --include-local) LOCAL=true ;;
+        [0-9]*) PARENT=$a ;;
+        *) die "usage: factory tickets next [<parent>] [--include-local]" ;;
+      esac
+    done
     # A parent's sub-issues keep their order (the spec's ticket order); otherwise oldest first.
     # Both lists carry each issue's labels, so only the blockers cost a call per ticket.
     if [ -n "$PARENT" ]; then
@@ -86,8 +98,11 @@ sub-issues, in order. When the last one closes, the spec moves to \`docs/specs/a
       ISSUES=$(factory_api_list "issues?labels=agent-task&state=open&sort=created&direction=asc&per_page=100") ||
         die "cannot list agent-task issues"
     fi
-    CANDIDATES=$(jq -r '.[] | select(.state == "open" and .pull_request == null)
-      | select([.labels[].name] | index("agent-task") and (index("in-progress") or index("blocked") | not))
+    # A `local` ticket is the owner's to develop interactively: only `factory start next` (which
+    # passes --include-local) may pick it, never an unattended run.
+    CANDIDATES=$(jq -r --argjson local "$LOCAL" '.[] | select(.state == "open" and .pull_request == null)
+      | select([.labels[].name] | index("agent-task") and (index("in-progress") or index("blocked") | not)
+        and ($local or (index("local") | not)))
       | .number' <<<"$ISSUES")
     for n in $CANDIDATES; do
       b=$(factory_open_blockers "$n") || {

@@ -15,6 +15,9 @@ the project).
 $FACTORY start <issue>        # or: $FACTORY start next [--parent <feature issue>]
 ```
 
+A ticket labelled `local` is meant for exactly this: unattended runs never pick it up, so it waits
+for you. `start next` includes local tickets.
+
 Exit 3: nothing is ready. Exit 4: the base branch is red — tell the user; nothing starts until it is
 fixed. Exit 5: the ticket blocked on unticked prerequisites — tell the user which. On success the
 last line is `WORKTREE=<path>` (inside the project, under `.factory/worktrees/`): `cd` there and

@@ -21,7 +21,8 @@ $FACTORY run [<issue> | next] [--parent <feature parent issue>]
 It works on **one ticket** and then stops; the user starts the next run. Without an issue,
 `factory attempt` picks the work: a ticket labelled `rework` first, then one of the factory's
 in-progress tickets whose last attempt ended unfinished or stalled, or whose open PR conflicts with
-the base (it labels that one `rework`), then the next ready ticket.
+the base (it labels that one `rework`), then the next ready ticket. A ticket labelled `local` is
+never picked: the owner develops it interactively.
 Each attempt is one fresh headless session, counted in a ticket comment: it implements, runs the
 local review through the reviewer/judge/resolver subagents, fixes confirmed findings, and ends
 with `factory finish`, which opens the PR when everything is done, or pushes the work in progress
@@ -33,7 +34,8 @@ session (default 200) instead.
 
 Exit codes: 0 the PR is open, 3 nothing to do, 4 the base branch is red, 5 the ticket is blocked,
 6 busy (another attempt is live: runs go one at a time, and an attempt that never ended counts as
-live for `run.staleMinutes`).
+live for `run.staleMinutes`), 7 the named ticket is labelled `local` (the owner develops it
+with start-ticket; removing the label hands it to the factory).
 
 Report what it did: the PR it opened (and the gate's risk label on it), or the ticket it blocked
 with its question — that question is the user's to answer.

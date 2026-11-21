@@ -122,6 +122,29 @@ list "$(li 4 agent-task in-progress)"
 attempt >/dev/null
 [ $? -eq 3 ] && ok || no "nothing to do: another session's lock is left alone"
 
+# ---------- local: the owner develops it interactively; no unattended run touches it ----------
+issue 21 agent-task local
+issue 22 agent-task in-progress rework local
+comments 22 "$(att 1 "$OLD" unfinished ticket/22-ticket-22)"
+issue 23 agent-task in-progress local
+comments 23 "$(att 1 "$OLD" unfinished ticket/23-ticket-23)"
+list "$(li 21 agent-task local)" "$(li 22 agent-task in-progress rework local)" "$(li 23 agent-task in-progress local)"
+fresh_calls
+attempt >/dev/null
+[ $? -eq 3 ] && ok || no "attempt picks no local ticket: ready, rework or unfinished ($(cat "$W/err"))"
+called POST "$I/21/labels" && no "a local ticket is not locked by attempt" || ok
+attempt 21 >/dev/null
+[ $? -eq 7 ] && ok || no "a named local ticket is refused with exit 7"
+grep -q "labelled local" "$W/err" && ok || no "the refusal says the ticket is local"
+called POST "$I/21/labels" && no "a refused local ticket is not locked" || ok
+called POST "$I/21/comments" && no "a refused local ticket gets no attempt comment" || ok
+# Interactive `factory start next` is what a local ticket waits for.
+list "$(li 21 agent-task local)"
+fresh_calls
+OUT=$("$FACTORY" start next 2>"$W/err")
+[ $? -eq 0 ] && [[ $OUT == *WORKTREE=* ]] && ok || no "start next picks a local ticket ($(tail -3 "$W/err"))"
+called POST "$I/21/labels" "labels[]=in-progress" && ok || no "start next locks the local ticket"
+
 # ---------- an open PR that conflicts with the base goes back for rework ----------
 # GitHub runs no pull_request workflow on a conflicting PR, so the gate never sends it back.
 issue 8 agent-task in-progress

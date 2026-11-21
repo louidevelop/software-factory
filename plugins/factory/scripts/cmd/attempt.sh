@@ -9,10 +9,13 @@
 #      recent attempt start or push: a crashed run), and that has no open PR; or whose open PR
 #      conflicts with the base (labelled `rework` here: the gate never runs on such a PR);
 #   3. the next ready ticket (`tickets next`).
+# A ticket labelled `local` is never picked or resumed here: the owner develops it interactively
+# (`factory start <n>`). Naming one refuses it (exit 7).
 # In place (the default in Claude's cloud, where CLAUDE_CODE_REMOTE=true) the ticket's branch is
 # checked out in this clone; otherwise it gets a worktree, as `factory start` does.
 # Exit codes: 0 started (stdout: the prompt), 3 nothing to do, 4 base branch red, 5 the named
-#             ticket is blocked, 6 busy (another attempt is live), 1 error.
+#             ticket is blocked, 6 busy (another attempt is live), 7 the named ticket is local,
+#             1 error.
 set -u
 # shellcheck source=../common.sh
 . "$FACTORY_SCRIPTS/common.sh"
@@ -109,9 +112,10 @@ if [ -n "$PARENT" ]; then
 else
   POOL=$ALL
 fi
-pool() { # pool <label> — open tickets in the pool with that label, not blocked, in order
+pool() { # pool <label> — open tickets in the pool with that label, not blocked or local, in order
   jq -r --arg l "$1" '.[] | select(.state == "open" and .pull_request == null)
-    | select([.labels[].name] | index("agent-task") and index($l) and (index("blocked") | not)) | .number' <<<"$POOL"
+    | select([.labels[].name] | index("agent-task") and index($l) and (index("blocked") or index("local") | not))
+    | .number' <<<"$POOL"
 }
 SKIP=" "
 pick() {
@@ -169,6 +173,10 @@ while :; do
   if [ "$WHICH" != next ] && ticket_has_label "$N" blocked; then
     warn "#$N is blocked; the owner answers its question first"
     exit 5
+  fi
+  if [ "$WHICH" != next ] && ticket_has_label "$N" local; then
+    warn "#$N is labelled local: the owner develops it interactively (factory start $N); remove the label to run it unattended"
+    exit 7
   fi
 
   # 3. Count the attempt; past run.maxAttempts (run.wholeFeature.maxAttempts for a whole-feature

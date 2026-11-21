@@ -51,7 +51,9 @@ bash "$FACTORY_SCRIPTS/cmd/archive-specs.sh" || warn "could not check for finish
 
 # 2. Pick the ticket.
 if [ "$WHICH" = next ]; then
-  N=$(bash "$FACTORY_SCRIPTS/cmd/tickets.sh" next ${PARENT:+"$PARENT"}) || {
+  # Interactive: a `local` ticket is exactly what this is for. `factory attempt` names its ticket,
+  # so this `next` is never an unattended pick.
+  N=$(bash "$FACTORY_SCRIPTS/cmd/tickets.sh" next ${PARENT:+"$PARENT"} --include-local) || {
     say "no ticket is ready: every open agent-task is in progress, blocked, or waiting on a blocker"
     exit 3
   }

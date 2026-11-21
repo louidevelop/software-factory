@@ -67,6 +67,7 @@ FACTORY_LABELS=(
   "merge|0e8a16|The owner's go-ahead: the gate merges this PR"
   "feature|5319e7|Parent issue tracking a feature spec"
   "whole-feature|5319e7|One ticket and one PR for a whole spec (its Delivery): a larger attempt budget"
+  "local|c2e0c6|Developed interactively: unattended runs never pick it up; factory start <n> does"
   "incident|b60205|Fixes what an earlier ticket missed or got wrong (found in QA)"
   "cause:spec|c5def5|Incident cause: the spec did not cover it or got it wrong"
   "cause:ticket|c5def5|Incident cause: the spec had it; the ticket left it out or misstated it"
